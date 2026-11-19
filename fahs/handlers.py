@@ -61,6 +61,16 @@ async def send_scan(message: Message, raw: str):
             "<i>هذه قراءة أولية للمؤشرات وليست ضمانًا للأمان أو حكمًا قاطعًا. لا تُدخل بياناتك في موقع لم تتحقق منه.</i>")
     await message.reply(text, disable_web_page_preview=True)
 
+
+@router.message(Command("admin"))
+async def admin_stats(message: Message):
+    if not message.from_user or message.from_user.id not in settings.admin_ids:
+        return
+    users, reminders, groups = db.stats()
+    await message.answer(
+        f"<b>لوحة فَحْص</b>\\nالمستخدمون المسجلون: {users}\\n"
+        f"المشتركون في التذكير: {reminders}\\nالمجموعات المفعّل بها الفحص: {groups}")
+
 @router.message(F.text)
 async def text_router(message: Message):
     if message.chat.type in {"group", "supergroup"}:
