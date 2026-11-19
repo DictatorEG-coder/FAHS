@@ -136,18 +136,22 @@ async def _scan_url(raw: str) -> dict:
         url = _normalise(raw)
         parts = urlsplit(url)
         host = parts.hostname or ""
-        addresses = await asyncio.to_thread(_resolve_public, host)
     except (ValueError, UnicodeError) as exc:
         return {"level": "تعذر إكمال الفحص", "score": 0, "reasons": [str(exc)], "url": "", "host": "", "chain": []}
 
-    reasons = []
-    score = 0
-    labels = [x for x in re.split(r"[./_-]", host) if x]
     feed_entries = await _openphish_entries()
     if url in feed_entries:
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابق الرابط حرفيًا مع مؤشر وارد في مصدر OpenPhish المفعّل."],
-                "url": url, "host": host, "ips": addresses, "chain": [], "source": "OpenPhish"}
+                "url": url, "host": host, "ips": [], "chain": [], "source": "OpenPhish"}
+    try:
+        addresses = await asyncio.to_thread(_resolve_public, host)
+    except (ValueError, UnicodeError) as exc:
+        return {"level": "تعذر إكمال الفحص", "score": 0, "reasons": [str(exc)], "url": url, "host": host, "chain": []}
+
+    reasons = []
+    score = 0
+    labels = [x for x in re.split(r"[./_-]", host) if x]
     if host in SHORTENERS:
         score += 1
         reasons.append("الرابط يستخدم خدمة اختصار؛ الوجهة النهائية تحتاج تحققًا")
