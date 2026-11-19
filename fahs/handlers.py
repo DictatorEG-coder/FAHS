@@ -1,7 +1,5 @@
 import re
-from html import escape
-import ipaddress
-from urllib.parse import urlsplit
+import html
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -16,7 +14,7 @@ from fahs.scanner import scan_url
 from fahs.config import settings
 
 router = Router()
-URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?<![@a-z0-9._-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?|(?<![0-9.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?:/[^\s<>]*)?)")
+URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?:/[^\s<>]*)?)")
 SCAN_EVENTS = defaultdict(deque)
 
 TIP_TEXT = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ\n\nاللهم صلِّ وسلم على نبينا محمد."
@@ -39,7 +37,9 @@ async def help_cmd(message: Message):
 
 @router.message(Command("fahs_on"))
 async def group_on(message: Message):
-    if message.chat.type not in {"group", "supergroup"} or not message.from_user:
+    if message.chat.type not in {"group", "supergroup"}:
+        return
+    if not message.from_user:
         return
     member = await message.chat.get_member(message.from_user.id)
     if member.status not in {"administrator", "creator"}:
@@ -49,82 +49,9 @@ async def group_on(message: Message):
     db.set_group(message.chat.id, True, auto_delete)
     await message.reply("تم تفعيل فحص الروابط التي تصل إلى البوت. يعتمد الرصد على رسائل تيليجرام التي يسمح إعداد الخصوصية والصلاحيات للبوت برؤيتها.")
 
-
-def _group_admin(message: Message) -> bool:
-    return bool(message.from_user and message.chat.type in {"group", "supergroup"})
-
-async def _require_group_admin(message: Message) -> bool:
-    if not _group_admin(message):
-        return False
-    member = await message.chat.get_member(message.from_user.id)
-    if member.status not in {"administrator", "creator"}:
-        await message.reply("هذا الأمر متاح لمشرفي المجموعة فقط.")
-        return False
-    return True
-
-def _allowlist_domain_arg(message: Message) -> str | None:
-    raw = (message.text or "").split(maxsplit=1)
-    if len(raw) != 2:
-        return None
-    value = raw[1].strip().lower().rstrip(".")
-    if "://" in value or any(ch in value for ch in "/\\@?#:") or "*" in value:
-        return None
-    try:
-        domain = value.encode("idna").decode("ascii")
-        ipaddress.ip_address(domain)
-    except UnicodeError:
-        return None
-    except ValueError:
-        pass
-    else:
-        return None
-    labels = domain.split(".")
-    if len(domain) > 253 or len(labels) < 2:
-        return None
-    if any(not re.fullmatch(r"(?!-)[a-z0-9-]{1,63}(?<!-)", label) for label in labels):
-        return None
-    return domain
-
-@router.message(Command("fahs_allow"))
-async def group_allow(message: Message):
-    if not await _require_group_admin(message):
-        return
-    domain = _allowlist_domain_arg(message)
-    if not domain:
-        await message.reply("استخدم الأمر هكذا: /fahs_allow example.com — اكتب اسم نطاق فقط دون رابط أو مسار.")
-        return
-    if not db.add_group_domain(message.chat.id, domain):
-        await message.reply("وصلت المجموعة إلى الحد الأقصى وهو 100 نطاق.")
-        return
-    await message.reply(f"أُضيف <code>{escape(domain)}</code> إلى قائمة الاستثناءات. ستُتجاوز روابط هذا النطاق ونطاقاته الفرعية في فحص المجموعة.")
-
-@router.message(Command("fahs_unallow"))
-async def group_unallow(message: Message):
-    if not await _require_group_admin(message):
-        return
-    domain = _allowlist_domain_arg(message)
-    if not domain:
-        await message.reply("استخدم الأمر هكذا: /fahs_unallow example.com")
-        return
-    removed = db.remove_group_domain(message.chat.id, domain)
-    await message.reply("حُذف النطاق من قائمة الاستثناءات." if removed else "هذا النطاق غير موجود في قائمة الاستثناءات.")
-
-@router.message(Command("fahs_allowlist"))
-async def group_allowlist(message: Message):
-    if not await _require_group_admin(message):
-        return
-    domains = db.list_group_domains(message.chat.id)
-    if not domains:
-        await message.reply("قائمة الاستثناءات فارغة.")
-        return
-    for offset in range(0, len(domains), 12):
-        body = "\n".join(f"• <code>{escape(domain)}</code>" for domain in domains[offset:offset + 12])
-        title = "<b>النطاقات المستثناة في هذه المجموعة</b>\n" if offset == 0 else ""
-        await message.reply(title + body)
-
 @router.message(Command("fahs_off"))
 async def group_off(message: Message):
-    if message.chat.type not in {"group", "supergroup"} or not message.from_user:
+    if message.chat.type not in {"group", "supergroup"}:
         return
     member = await message.chat.get_member(message.from_user.id)
     if member.status not in {"administrator", "creator"}:
@@ -144,20 +71,14 @@ async def send_scan(message: Message, raw: str) -> bool:
         return False
     events.append(now)
     result = await scan_url(raw)
-    reasons = "\n".join("• " + escape(x) for x in result["reasons"])
-    host = escape(result.get("host") or "غير متاح")
-    source = escape(result.get("source") or "تحليل محلي")
-    checked_sources = "، ".join(escape(x) for x in result.get("sources_checked", [])) or "لا توجد مصادر خارجية مفعّلة"
-    unavailable_sources = "، ".join(escape(x) for x in result.get("sources_unavailable", []))
+    reasons = "\n".join("• " + html.escape(x) for x in result["reasons"])
+    host = html.escape(result.get("host") or "غير متاح")
     checked_at = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d %H:%M")
     redirects = max(0, len(result.get("chain", [])) - 1)
     text = (f"<b>نتيجة فحص فَحْص</b>\n"
             f"التصنيف: <b>{result['level']}</b>\n"
             f"النطاق: <code>{host}</code>\n"
-            f"مصدر المطابقة: <code>{source}</code>\n"
-            f"مصادر السمعة المتاحة: <code>{checked_sources}</code>\n"
-            + (f"مصادر تعذر الوصول إليها: <code>{unavailable_sources}</code>\\n" if unavailable_sources else "")
-            + f"وقت الفحص: <code>{checked_at}</code>\n"
+            f"وقت الفحص: <code>{checked_at}</code>\n"
             f"التحويلات المرصودة: <code>{redirects}</code>\n\n"
             f"<b>المؤشرات:</b>\n{reasons}\n\n"
             "<i>هذه قراءة أولية للمؤشرات وليست ضمانًا للأمان أو حكمًا قاطعًا. لا تُدخل بياناتك في موقع لم تتحقق منه.</i>")
@@ -236,14 +157,6 @@ async def text_router(message: Message):
         return
     for match in matches[:3]:
         raw = match.rstrip(".,،؛!؟)]}")
-        if message.chat.type in {"group", "supergroup"}:
-            try:
-                host = urlsplit(raw if "://" in raw else "https://" + raw).hostname or ""
-                host = host.encode("idna").decode("ascii").lower().rstrip(".")
-            except (ValueError, UnicodeError):
-                host = ""
-            if host and db.group_domain_allowed(message.chat.id, host):
-                continue
         deleted = await send_scan(message, raw)
         if deleted:
             break
