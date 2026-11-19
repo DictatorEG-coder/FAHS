@@ -14,6 +14,7 @@ def init_db():
             user_id INTEGER PRIMARY KEY,
             reminders INTEGER NOT NULL DEFAULT 0,
             last_reminder_date TEXT,
+            reminder_interval INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS group_settings (
@@ -25,6 +26,8 @@ def init_db():
         columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
         if "last_reminder_date" not in columns:
             db.execute("ALTER TABLE users ADD COLUMN last_reminder_date TEXT")
+        if "reminder_interval" not in columns:
+            db.execute("ALTER TABLE users ADD COLUMN reminder_interval INTEGER NOT NULL DEFAULT 1")
 
 def touch_user(user_id: int):
     with connect() as db:
@@ -44,6 +47,29 @@ def reminder_users():
     with connect() as db:
         rows = db.execute("SELECT user_id FROM users WHERE reminders=1").fetchall()
         return [int(row["user_id"]) for row in rows]
+
+def get_reminder_interval(user_id: int) -> int:
+    with connect() as db:
+        row = db.execute("SELECT reminder_interval FROM users WHERE user_id=?", (user_id,)).fetchone()
+        return int(row["reminder_interval"]) if row else 1
+
+def set_reminder_interval(user_id: int, days: int):
+    if days not in (1, 2):
+        raise ValueError("Reminder interval must be one or two days")
+    touch_user(user_id)
+    with connect() as db:
+        db.execute("UPDATE users SET reminder_interval=? WHERE user_id=?", (days, user_id))
+
+def reminder_due(user_id: int, day: str) -> bool:
+    from datetime import date
+    with connect() as db:
+        row = db.execute("SELECT last_reminder_date, reminder_interval FROM users WHERE user_id=?", (user_id,)).fetchone()
+        if not row:
+            return False
+        last = row["last_reminder_date"]
+        if not last:
+            return True
+        return (date.fromisoformat(day) - date.fromisoformat(last)).days >= int(row["reminder_interval"])
 
 def mark_reminder_sent(user_id: int, day: str):
     with connect() as db:
