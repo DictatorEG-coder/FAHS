@@ -3,8 +3,6 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from fahs.config import settings
 from fahs.db import init_db
 from fahs.handlers import router
