@@ -27,7 +27,7 @@ BRANDS = {
     "amazon": "amazon.com", "instagram": "instagram.com", "whatsapp": "whatsapp.com",
     "tiktok": "tiktok.com", "netflix": "netflix.com", "binance": "binance.com"
 }
-SENSITIVE_KEY_RE = re.compile(r"(^|[_-])(token|auth|key|session|code|password|otp|secret|sid|ticket)([_-]|$)", re.I)
+SENSITIVE_KEY_RE = re.compile(r"(^|[_-])(token|auth|key|session|code|password|otp|secret|sid|ticket|jwt|bearer|credential|cookie|signature|samlresponse)([_-]|$)", re.I)
 
 def _is_public_ip(value: str) -> bool:
     ip = ipaddress.ip_address(value)
@@ -109,11 +109,11 @@ def _has_sensitive_query(url: str) -> bool:
         compact = re.sub(r"[^a-z0-9]", "", key.lower())
         if SENSITIVE_KEY_RE.search(key):
             return True
-        if compact in {"code", "verificationcode", "accesscode", "pin"}:
+        if compact in {"code", "verificationcode", "accesscode", "pin", "samlresponse"}:
             return True
-        if compact.endswith(("token", "key", "secret", "password", "otp", "sid", "ticket")):
+        if compact.endswith(("token", "key", "secret", "password", "otp", "sid", "ticket", "jwt", "bearer", "credential", "cookie", "signature")):
             return True
-        if compact.startswith(("auth", "session")):
+        if compact.startswith(("auth", "session", "credential", "authorization")):
             return True
     return False
 
