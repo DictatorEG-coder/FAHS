@@ -4,6 +4,7 @@ import asyncio
 import re
 import socket
 import time
+from difflib import SequenceMatcher
 from urllib.parse import urlsplit, urlunsplit, parse_qsl
 import httpx
 from fahs.config import settings
@@ -17,6 +18,12 @@ SUSPICIOUS_WORDS = {
     "تسجيل", "تحقق", "حساب", "جائزة", "هدية", "بنك", "محفظة"
 }
 SHORTENERS = {"bit.ly", "t.co", "tinyurl.com", "is.gd", "cutt.ly", "rb.gy", "shorturl.at", "ow.ly"}
+BRANDS = {
+    "paypal": "paypal.com", "telegram": "telegram.org", "google": "google.com",
+    "facebook": "facebook.com", "microsoft": "microsoft.com", "apple": "apple.com",
+    "amazon": "amazon.com", "instagram": "instagram.com", "whatsapp": "whatsapp.com",
+    "tiktok": "tiktok.com", "netflix": "netflix.com", "binance": "binance.com"
+}
 SENSITIVE_KEY_RE = re.compile(r"(^|[_-])(token|auth|key|session|code|password|otp|secret|sid|ticket)([_-]|$)", re.I)
 
 def _is_public_ip(value: str) -> bool:
@@ -70,6 +77,17 @@ def _normalise(raw: str) -> str:
     authority = f"[{host}]" if ":" in host else host
     authority += f":{port}" if port else ""
     return urlunsplit((parts.scheme.lower(), authority, parts.path or "/", parts.query, ""))
+
+def _brand_lookalike(host: str) -> str | None:
+    root = host.split(".")[0]
+    compact = re.sub(r"[^a-z0-9]", "", root)
+    for brand, official_domain in BRANDS.items():
+        if host == official_domain or host.endswith("." + official_domain):
+            continue
+        similarity = SequenceMatcher(None, compact, brand).ratio()
+        if compact != brand and similarity >= 0.80:
+            return brand
+    return None
 
 def _has_sensitive_query(url: str) -> bool:
     return any(SENSITIVE_KEY_RE.search(k) for k, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True))
@@ -155,6 +173,10 @@ async def _scan_url(raw: str) -> dict:
     if host in SHORTENERS:
         score += 1
         reasons.append("الرابط يستخدم خدمة اختصار؛ الوجهة النهائية تحتاج تحققًا")
+    lookalike = _brand_lookalike(host)
+    if lookalike:
+        score += 2
+        reasons.append(f"اسم النطاق يشبه علامة معروفة ({lookalike}) دون أن يطابق نطاقها الرسمي")
     if len(host) > 45 or host.count("-") >= 3:
         score += 1
         reasons.append("تركيب النطاق طويل أو غير معتاد")
