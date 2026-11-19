@@ -11,7 +11,7 @@ MESSAGES = [
 ]
 
 async def reminder_loop(bot: Bot):
-    # Opt-in only; at most one message per subscribed user per Cairo calendar day.
+    # Opt-in only; each user chooses daily or every-other-day delivery.
     while True:
         now = datetime.now(ZoneInfo("Africa/Cairo"))
         day = now.date().isoformat()
