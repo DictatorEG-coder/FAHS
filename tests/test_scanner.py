@@ -34,6 +34,9 @@ class ScannerUnitTests(unittest.TestCase):
     def test_detects_brand_typo(self):
         self.assertEqual(_brand_lookalike("paypa1.com"), "paypal")
 
+    def test_detects_brand_name_on_unofficial_domain(self):
+        self.assertEqual(_brand_lookalike("paypal.net"), "paypal")
+
     def test_detects_brand_domain_nested_under_attacker_domain(self):
         self.assertEqual(_brand_lookalike("paypal.com.evil.example"), "paypal")
 
