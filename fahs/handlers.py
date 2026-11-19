@@ -33,6 +33,14 @@ async def start(message: Message):
     db.touch_user(message.from_user.id)
     await message.answer(welcome(), reply_markup=main_menu())
 
+@router.message(Command("my_id"))
+async def my_id(message: Message):
+    if message.chat.type != "private" or not message.from_user:
+        await message.reply("استخدم هذا الأمر في المحادثة الخاصة مع فَحْص.")
+        return
+    await message.answer(f"معرّف تيليجرام الخاص بك: <code>{message.from_user.id}</code>\nاستخدمه في متغير ADMIN_IDS إذا كنت مشغّل البوت.")
+
+
 @router.message(Command("help"))
 async def help_cmd(message: Message):
     await message.answer("أرسل الرابط كنص عادي أو استخدم القائمة. لا ترسل كلمات مرور أو رموز تحقق أو روابط خاصة تحتوي بيانات دخول.", reply_markup=main_menu())

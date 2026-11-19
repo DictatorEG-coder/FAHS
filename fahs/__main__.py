@@ -18,6 +18,7 @@ async def main():
     await bot.set_my_commands([
         BotCommand(command="start", description="القائمة الرئيسية"),
         BotCommand(command="help", description="طريقة الاستخدام"),
+        BotCommand(command="my_id", description="عرض معرّفك في تيليجرام"),
         BotCommand(command="fahs_on", description="تفعيل فحص روابط المجموعة للمشرفين"),
         BotCommand(command="fahs_off", description="إيقاف فحص روابط المجموعة للمشرفين"),
         BotCommand(command="fahs_delete_on", description="تفعيل حذف الروابط عالية الخطورة"),
