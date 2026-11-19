@@ -170,9 +170,9 @@ async def group_status(message: Message):
     scan_label = "مفعّل" if enabled else "متوقف"
     delete_label = "مفعّل" if auto_delete else "متوقف"
     await message.reply(
-        "<b>حالة حماية فَحْص في هذه المجموعة</b>\\n"
-        f"فحص الروابط: <b>{scan_label}</b>\\n"
-        f"الحذف التلقائي: <b>{delete_label}</b>\\n"
+        "<b>حالة حماية فَحْص في هذه المجموعة</b>\n"
+        f"فحص الروابط: <b>{scan_label}</b>\n"
+        f"الحذف التلقائي: <b>{delete_label}</b>\n"
         f"النطاقات المستثناة: <b>{len(domains)} / 100</b>"
     )
 
