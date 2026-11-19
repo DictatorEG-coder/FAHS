@@ -1,5 +1,6 @@
 import unittest
-from fahs.handlers import URL_RE, _allow_scan, SCAN_EVENTS, GLOBAL_SCAN_EVENTS
+from types import SimpleNamespace
+from fahs.handlers import URL_RE, _allow_scan, SCAN_EVENTS, GLOBAL_SCAN_EVENTS, _extract_message_urls
 
 
 class URLExtractionTests(unittest.TestCase):
@@ -12,6 +13,21 @@ class URLExtractionTests(unittest.TestCase):
 
     def test_extracts_ipv4_link(self):
         self.assertEqual(URL_RE.findall("127.0.0.1"), ["127.0.0.1"])
+
+    def test_deduplicates_visible_and_embedded_text_links(self):
+        message = SimpleNamespace(
+            text="افتح example.com", caption=None,
+            entities=[SimpleNamespace(type="text_link", url="https://example.com/")],
+            caption_entities=None,
+        )
+        self.assertEqual(_extract_message_urls(message), ["example.com"])
+
+    def test_extracts_at_most_three_unique_links(self):
+        message = SimpleNamespace(
+            text="a.example b.example c.example d.example", caption=None,
+            entities=[], caption_entities=[],
+        )
+        self.assertEqual(len(_extract_message_urls(message)), 3)
 
 
 
