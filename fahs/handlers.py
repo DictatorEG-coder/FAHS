@@ -156,7 +156,7 @@ async def send_scan(message: Message, raw: str) -> bool:
             f"النطاق: <code>{host}</code>\n"
             f"مصدر المطابقة: <code>{source}</code>\n"
             f"مصادر السمعة المتاحة: <code>{checked_sources}</code>\n"
-            + (f"مصادر تعذر الوصول إليها: <code>{unavailable_sources}</code>\\n" if unavailable_sources else "")
+            + (f"مصادر تعذر الوصول إليها: <code>{unavailable_sources}</code>\n" if unavailable_sources else "")
             + f"وقت الفحص: <code>{checked_at}</code>\n"
             f"التحويلات المرصودة: <code>{redirects}</code>\n\n"
             f"<b>المؤشرات:</b>\n{reasons}\n\n"

@@ -46,6 +46,36 @@ class RedirectSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(connect.await_args.kwargs["host"], "93.184.216.34")
         self.assertEqual(connect.await_args.kwargs["server_hostname"], "example.com")
         self.assertTrue(writer.closed)
+        self.assertTrue(writer.data.startswith(b"HEAD / HTTP/1.1\r\n"))
+
+    async def test_sensitive_query_stops_before_network_connection(self):
+        with (
+            patch("fahs.scanner._resolve_public", return_value=["93.184.216.34"]),
+            patch("fahs.scanner.asyncio.open_connection", new_callable=AsyncMock) as connect,
+        ):
+            chain, note = await _redirect_chain("https://example.com/?access_token=secret")
+
+        self.assertEqual(chain, ["https://example.com/?access_token=secret"])
+        self.assertIn("بيانات حساسة", note)
+        connect.assert_not_awaited()
+
+    async def test_rejects_credentials_in_redirect_location(self):
+        reader = FakeReader([
+            b"HTTP/1.1 302 Found\r\n",
+            b"Location: https://user:pass@evil.example/\r\n",
+            b"\r\n",
+        ])
+        writer = FakeWriter()
+        with (
+            patch("fahs.scanner._resolve_public", return_value=["93.184.216.34"]),
+            patch("fahs.scanner.asyncio.open_connection", new_callable=AsyncMock) as connect,
+        ):
+            connect.return_value = (reader, writer)
+            chain, note = await _redirect_chain("https://example.com/")
+
+        self.assertEqual(chain, ["https://example.com/"])
+        self.assertIn("بيانات دخول", note)
+        connect.assert_awaited_once()
 
     async def test_revalidates_redirect_destination_before_connecting(self):
         reader = FakeReader([
