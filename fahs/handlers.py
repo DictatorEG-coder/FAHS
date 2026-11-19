@@ -141,11 +141,13 @@ async def send_scan(message: Message, raw: str) -> bool:
     result = await scan_url(raw)
     reasons = "\n".join("• " + escape(x) for x in result["reasons"])
     host = escape(result.get("host") or "غير متاح")
+    source = escape(result.get("source") or "تحليل محلي")
     checked_at = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d %H:%M")
     redirects = max(0, len(result.get("chain", [])) - 1)
     text = (f"<b>نتيجة فحص فَحْص</b>\n"
             f"التصنيف: <b>{result['level']}</b>\n"
             f"النطاق: <code>{host}</code>\n"
+            f"مصدر المطابقة: <code>{source}</code>\n"
             f"وقت الفحص: <code>{checked_at}</code>\n"
             f"التحويلات المرصودة: <code>{redirects}</code>\n\n"
             f"<b>المؤشرات:</b>\n{reasons}\n\n"
