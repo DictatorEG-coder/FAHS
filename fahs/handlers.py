@@ -175,7 +175,7 @@ async def reminders_toggle(call: CallbackQuery):
     enabled = not db.get_reminders(call.from_user.id)
     db.set_reminders(call.from_user.id, enabled)
     note = "فُعّلت التذكيرات الاختيارية." if enabled else "أُوقفت التذكيرات."
-    await call.message.edit_text(note + "\nتصل التذكيرات مرة يوميًا في موعد ثابت، ويمكنك إيقافها من هنا.", reply_markup=settings_menu(enabled, db.get_reminder_interval(call.from_user.id)))
+    await call.message.edit_text(note + "\nتصل التذكيرات وفق التكرار المحدد، ويمكنك إيقافها من هنا.", reply_markup=settings_menu(enabled, db.get_reminder_interval(call.from_user.id)))
     await call.answer()
 
 @router.callback_query(F.data == "quiz")
