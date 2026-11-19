@@ -22,10 +22,11 @@ def main_menu():
 def back_menu():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")]])
 
-def settings_menu(reminders: bool):
+def settings_menu(reminders: bool, interval: int = 1):
     label = "إيقاف التذكيرات" if reminders else "تفعيل التذكيرات الاختيارية"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=label, callback_data="reminders_toggle")],
+        [InlineKeyboardButton(text=f"التكرار: {'يوميًا' if interval == 1 else 'كل يومين'}", callback_data="reminder_interval_toggle")],
         [InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")]
     ])
 
