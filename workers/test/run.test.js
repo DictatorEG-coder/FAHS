@@ -16,6 +16,7 @@ globalThis.fetch = async (url, opts = {}) => {
     const method = u.split("/").pop();
     const body = JSON.parse(opts.body || "{}");
     calls.push({ method, body });
+    if (method === "getChatMember") return json({ ok: true, result: { status: "administrator" } });
     if (method === "copyMessage" && body.chat_id === 999) return json({ ok: false, error_code: 403, description: "blocked" });
     return json({ ok: true, result: { message_id: ++msgId } });
   }
@@ -80,14 +81,15 @@ await t("المصطلحات: 24 مصطلحاً", async () => {
   reset(); await handleUpdate(env, ctx, cbq(50, "s:5"));
   assert.equal(kbTexts(last("editMessageText")).filter((x) => /\||API|DNS|VPS/.test(x)).length >= 20, true);
 });
-await t("فحص رابط مشبوه مع VirusTotal", async () => {
+await t("فحص رابط مشبوه محلياً دون إرسال تلقائي إلى VirusTotal", async () => {
   reset(); await handleUpdate(env, ctx, msg(50, "شوف http://paypal.login-secure.xyz/verify"));
-  const e = last("editMessageText"); assert.ok(e.body.text.includes("خطير"), e.body.text); assert.ok(e.body.text.includes("7 خطير"));
-  assert.ok(e.body.reply_markup.inline_keyboard.flat().some((b) => b.url?.includes("virustotal.com/gui/url/")));
+  const e = last("editMessageText"); assert.ok(e.body.text.includes("خطير"), e.body.text);
+  assert.ok(!calls.some((c) => String(c.method).includes("virustotal")));
+  assert.ok(!e.body.reply_markup.inline_keyboard.flat().some((b) => b.url?.includes("virustotal.com/gui/url/")));
 });
-await t("فحص رابط مختصر يتتبع الوجهة", async () => {
+await t("الرابط المختصر لا يُفتح ولا تُخمن وجهته", async () => {
   reset(); await handleUpdate(env, ctx, msg(50, "http://bit.ly/abc"));
-  const e = last("editMessageText"); assert.ok(e.body.text.includes("الوجهة النهائية") && e.body.text.includes("evil-login.example.xyz"), e.body.text);
+  const e = last("editMessageText"); assert.ok(e.body.text.includes("لم نفتح الرابط") && e.body.text.includes("لا يمكن تأكيد الوجهة النهائية"), e.body.text);
 });
 await t("فحص رابط داخلي مرفوض (SSRF)", async () => {
   reset(); await handleUpdate(env, ctx, msg(50, "http://169.254.169.254/latest/meta-data"));
@@ -150,6 +152,15 @@ await t("المالك: إذاعة بالدفعات مع استبعاد من حظ
   const { first } = await import("../src/db.js");
   assert.equal((await first(env, "SELECT active FROM users WHERE id=999")).active, 0);
 });
+await t("حماية المجموعات: التفعيل والفحص والإيقاف", async () => {
+  const groupMessage = (from, text) => ({ update_id: 77, message: { message_id: ++msgId, chat: { id: -100123, type: "supergroup" }, from: { id: from, is_bot: false }, text } });
+  reset(); await handleUpdate(env, ctx, groupMessage(50, "/fahs_on"));
+  assert.ok(last("sendMessage").body.text.includes("تم تفعيل"));
+  reset(); await handleUpdate(env, ctx, groupMessage(50, "https://paypal.login-secure.xyz/verify"));
+  assert.ok(last("editMessageText")?.body.text.includes("خطير"));
+  reset(); await handleUpdate(env, ctx, groupMessage(50, "/fahs_off"));
+  assert.ok(last("sendMessage").body.text.includes("إيقاف"));
+});
 await t("الإحصائيات والإعدادات", async () => {
   reset(); await handleUpdate(env, ctx, cbq(1, "a:st")); const s = last("editMessageText").body.text; assert.ok(s.includes("إحصائيات") && /عمليات الفحص: <b>[1-9]/.test(s), s);
   await handleUpdate(env, ctx, cbq(1, "a:tg:maintenance"));
@@ -160,6 +171,7 @@ await t("ويب هوك: رفض بدون السر", async () => {
   const w = (await import("../src/index.js")).default;
   const r = await w.fetch(new Request("https://x.dev/webhook", { method: "POST", body: "{}" }), env, ctx);
   assert.equal(r.status, 403);
-  const r2 = await w.fetch(new Request("https://x.dev/setup?key=bad"), env, ctx); assert.equal(r2.status, 403);
+  const r2 = await w.fetch(new Request("https://x.dev/setup?key=bad"), env, ctx); assert.equal(r2.status, 405);
+  const r3 = await w.fetch(new Request("https://x.dev/setup", { method: "POST", headers: { "x-fahs-setup-secret": "bad" } }), env, ctx); assert.equal(r3.status, 403);
 });
 console.log(`\n${pass} اختباراً نجح`);
