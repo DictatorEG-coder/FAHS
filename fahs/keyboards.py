@@ -7,7 +7,8 @@ def main_menu():
         [InlineKeyboardButton(text="📚 موسوعة الاحتيال", callback_data="scams"), InlineKeyboardButton(text="🧠 احتيال الذكاء الاصطناعي", callback_data="ai_scams")],
         [InlineKeyboardButton(text="🔐 مخاطر مشاركة البيانات", callback_data="data"), InlineKeyboardButton(text="🚨 تعرضت للاحتيال", callback_data="emergency")],
         [InlineKeyboardButton(text="🎯 اختبر نفسك", callback_data="quiz"), InlineKeyboardButton(text="💡 نصيحة اليوم", callback_data="tip")],
-        [InlineKeyboardButton(text="⚙️ الإعدادات", callback_data="settings"), InlineKeyboardButton(text="ℹ️ عن فَحْص", callback_data="about")]
+        [InlineKeyboardButton(text="⚙️ الإعدادات", callback_data="settings"), InlineKeyboardButton(text="ℹ️ عن فَحْص", callback_data="about")],
+        [InlineKeyboardButton(text="📜 سياسة الخصوصية", callback_data="privacy")]
     ]
     links = []
     for title, url in [("قناة التحديثات", settings.updates_url), ("التواصل مع المطور", settings.developer_url), ("ادعم فَحْص", settings.support_url)]:
