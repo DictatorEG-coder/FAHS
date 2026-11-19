@@ -1,0 +1,26 @@
+name: Cloudflare Workers checks
+
+on:
+  push:
+    paths:
+      - "workers/**"
+      - ".github/workflows/workers.yml"
+  pull_request:
+    paths:
+      - "workers/**"
+      - ".github/workflows/workers.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        working-directory: workers
+        run: npm install
+      - name: Run tests
+        working-directory: workers
+        run: npm test
