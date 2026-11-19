@@ -20,5 +20,13 @@ class ScannerUnitTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _resolve_public("127.0.0.1")
 
+    def test_rejects_localhost_name(self):
+        with self.assertRaises(ValueError):
+            _resolve_public("localhost")
+
+    def test_ipv6_loopback_is_rejected(self):
+        with self.assertRaises(ValueError):
+            _resolve_public("::1")
+
 if __name__ == "__main__":
     unittest.main()
