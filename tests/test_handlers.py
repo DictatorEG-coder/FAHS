@@ -105,7 +105,7 @@ class EditableContentTests(unittest.TestCase):
         from fahs.handlers import CONTENT_CATEGORIES
         self.assertEqual(
             set(CONTENT_CATEGORIES),
-            {"scams", "ai_scams", "data", "protection", "emergency", "glossary"},
+            {"scams", "ai_scams", "data", "protection", "emergency", "glossary", "tips"},
         )
         self.assertNotIn("scanner", CONTENT_CATEGORIES)
 
@@ -141,5 +141,6 @@ class EditableContentTests(unittest.TestCase):
         with patch("fahs.handlers.db.get_content_overrides", return_value={}):
             self.assertGreaterEqual(len(_catalog_items("emergency")), 12)
             self.assertGreaterEqual(len(_catalog_items("glossary")), 10)
+            self.assertGreaterEqual(len(_catalog_items("tips")), 1)
 
 
