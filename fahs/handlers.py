@@ -755,7 +755,31 @@ async def library_detail(call: CallbackQuery):
 
 @router.callback_query(F.data == "emergency")
 async def emergency(call: CallbackQuery):
-    await call.message.edit_text("اختر ما حدث لك للحصول على خطوات أولية:", reply_markup=emergency_menu())
+    items = _catalog_items("emergency")
+    rows = [[InlineKeyboardButton(text=title[:60], callback_data=f"em_item:{i}")]
+            for i, (_, title, _) in enumerate(items)]
+    rows.append([InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")])
+    await call.message.edit_text(
+        "اختر ما حدث لك للحصول على خطوات أولية:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("em_item:"))
+async def emergency_dynamic_detail(call: CallbackQuery):
+    try:
+        index = int(call.data.split(":", 1)[1])
+        _, title, body = _catalog_items("emergency")[index]
+    except (ValueError, IndexError):
+        await call.answer("هذه الحالة غير متاحة.", show_alert=True)
+        return
+    await call.message.edit_text(
+        f"<b>{escape(title)}</b>\n\n{escape(body)}\n\n"
+        "لا تحذف الأدلة، وتواصل مع البنك أو المنصة أو الجهات الرسمية عبر قنواتها الموثقة.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ حالات الطوارئ", callback_data="emergency")],
+            [InlineKeyboardButton(text="القائمة الرئيسية", callback_data="home")],
+        ]))
     await call.answer()
 
 @router.callback_query(F.data.startswith("em:"))
