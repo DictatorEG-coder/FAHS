@@ -302,7 +302,7 @@ async def library(call: CallbackQuery):
         rows.append(row)
     rows.append([InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")])
     await call.message.edit_text(
-        f"<b>{escape(title)}</b>\\nاختر الموضوع الذي تريد قراءته:",
+        f"<b>{escape(title)}</b>\nاختر الموضوع الذي تريد قراءته:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
     await call.answer()
@@ -348,7 +348,7 @@ async def library_detail(call: CallbackQuery):
         InlineKeyboardButton(text="الرئيسية", callback_data="home"),
     ])
     await call.message.edit_text(
-        f"<b>{escape(heading)}</b>\\n\\n{escape(explanation)}\\n\\n"
+        f"<b>{escape(heading)}</b>\n\n{escape(explanation)}\n\n"
         f"<i>{index + 1} من {len(items)} — {escape(title)}</i>",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
