@@ -1,4 +1,6 @@
 import re
+import asyncio
+import uuid
 from html import escape
 import ipaddress
 from urllib.parse import urlsplit
@@ -365,14 +367,51 @@ PROTECTION_GUIDES = {
     "family": ("حماية الأسرة والأطفال", "• اتفقوا على كلمة تحقق عائلية للطلبات العاجلة.\n• علّم الأطفال عدم مشاركة الصور أو الموقع أو الرموز.\n• اجعل الإبلاغ عن رسالة مريبة آمنًا بلا توبيخ.\n• راجع إعدادات الخصوصية والمشتريات بما يناسب العمر.")
 }
 
+
+CONTENT_CATEGORIES = {
+    "scams": "موسوعة الاحتيال",
+    "ai_scams": "احتيال الذكاء الاصطناعي",
+    "data": "مخاطر مشاركة البيانات",
+    "protection": "أدلة الحماية",
+    "emergency": "حالات الطوارئ",
+    "glossary": "قاموس الأمن الرقمي",
+}
+
+
+def _catalog_items(category: str):
+    """Return stable-key content items merged with persistent admin overrides."""
+    if category == "protection":
+        base = {key: (title, body) for key, (title, body) in PROTECTION_GUIDES.items()}
+    elif category == "emergency":
+        base = {title: (title, body) for title, body in EMERGENCY.items()}
+    elif category == "glossary":
+        base = {term: (term, meaning) for term, meaning in GLOSSARY.items()}
+    else:
+        base_map = {"scams": SCAMS, "ai_scams": AI_SCAMS, "data": DATA_RISKS}
+        base = {key: (key, body) for key, body in base_map.get(category, {}).items()}
+
+    overrides = db.get_content_overrides(category)
+    result = []
+    for key, (title, body) in base.items():
+        override = overrides.get(key)
+        if override and override["deleted"]:
+            continue
+        if override:
+            title, body = override["title"], override["body"]
+        result.append((key, title, body))
+    for key, override in overrides.items():
+        if key not in base and not override["deleted"]:
+            result.append((key, override["title"], override["body"]))
+    return result
+
 @router.callback_query(F.data == "protect")
 async def protect(call: CallbackQuery):
-    items = list(PROTECTION_GUIDES.items())
+    items = _catalog_items("protection")
     rows = []
     for i in range(0, len(items), 2):
-        row = [InlineKeyboardButton(text=items[i][1][0], callback_data=f"guide:{items[i][0]}")]
+        row = [InlineKeyboardButton(text=items[i][1], callback_data=f"guide:{items[i][0]}")]
         if i + 1 < len(items):
-            row.append(InlineKeyboardButton(text=items[i + 1][1][0], callback_data=f"guide:{items[i + 1][0]}"))
+            row.append(InlineKeyboardButton(text=items[i + 1][1], callback_data=f"guide:{items[i + 1][0]}"))
         rows.append(row)
     rows.append([InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")])
     await call.message.edit_text("<b>مركز الحماية الرقمية</b>\nاختر المجال لفتح دليل عملي:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
@@ -381,11 +420,11 @@ async def protect(call: CallbackQuery):
 @router.callback_query(F.data.startswith("guide:"))
 async def protection_guide(call: CallbackQuery):
     key = call.data.split(":", 1)[1]
-    item = PROTECTION_GUIDES.get(key)
+    item = next((x for x in _catalog_items("protection") if x[0] == key), None)
     if not item:
         await call.answer("هذا الدليل غير متاح.", show_alert=True)
         return
-    title, body = item
+    _, title, body = item
     await call.message.edit_text(f"<b>{escape(title)}</b>\n\n{escape(body)}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📚 أدلة الحماية", callback_data="protect")],
         [InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")]
@@ -401,15 +440,15 @@ async def library(call: CallbackQuery):
     else:
         data, title = DATA_RISKS, "مخاطر مشاركة البيانات"
 
-    items = list(data.items())
+    items = _catalog_items(call.data)
     rows = []
     for index in range(0, len(items), 2):
         row = [
-            InlineKeyboardButton(text=items[index][0], callback_data=f"lib:{call.data}:{index}")
+            InlineKeyboardButton(text=items[index][1], callback_data=f"lib:{call.data}:{index}")
         ]
         if index + 1 < len(items):
             row.append(InlineKeyboardButton(
-                text=items[index + 1][0],
+                text=items[index + 1][1],
                 callback_data=f"lib:{call.data}:{index + 1}",
             ))
         rows.append(row)
@@ -430,22 +469,21 @@ async def library_detail(call: CallbackQuery):
         await call.answer("تعذر فتح الموضوع.", show_alert=True)
         return
 
-    catalogues = {
-        "scams": (SCAMS, "موسوعة أساليب الاحتيال"),
-        "ai_scams": (AI_SCAMS, "الاحتيال بالذكاء الاصطناعي"),
-        "data": (DATA_RISKS, "مخاطر مشاركة البيانات"),
+    titles = {
+        "scams": "موسوعة أساليب الاحتيال",
+        "ai_scams": "الاحتيال بالذكاء الاصطناعي",
+        "data": "مخاطر مشاركة البيانات",
     }
-    selected = catalogues.get(category)
-    if not selected:
+    if category not in titles:
         await call.answer("هذا القسم غير متاح.", show_alert=True)
         return
-    data, title = selected
-    items = list(data.items())
+    title = titles[category]
+    items = _catalog_items(category)
     if index < 0 or index >= len(items):
         await call.answer("الموضوع غير موجود.", show_alert=True)
         return
 
-    heading, explanation = items[index]
+    _, heading, explanation = items[index]
     navigation = []
     if index > 0:
         navigation.append(InlineKeyboardButton(
@@ -489,7 +527,8 @@ async def emergency_detail(call: CallbackQuery):
         "link": "ضغطت رابطًا مشبوهًا",
     }
     key = keys.get(call.data[3:], "")
-    body = EMERGENCY.get(key, "أوقف التفاعل، واحتفظ بالأدلة، وتواصل مع الجهة الرسمية المعنية.")
+    emergency_items = {item_key: body for item_key, _, body in _catalog_items("emergency")}
+    body = emergency_items.get(key, "أوقف التفاعل، واحتفظ بالأدلة، وتواصل مع الجهة الرسمية المعنية.")
     await call.message.edit_text(f"<b>خطوات أولية</b>\n{body}\n\nلا تحذف الأدلة، وتواصل مع البنك أو المنصة أو الجهات الرسمية عبر قنواتها الموثقة.", reply_markup=back_menu())
     await call.answer()
 
@@ -615,7 +654,7 @@ async def privacy(call: CallbackQuery):
 GLOSSARY_PAGE_SIZE = 5
 
 async def _show_glossary_page(call: CallbackQuery, page: int):
-    entries = list(GLOSSARY.items())
+    entries = [(title, body) for _, title, body in _catalog_items("glossary")]
     pages = max(1, (len(entries) + GLOSSARY_PAGE_SIZE - 1) // GLOSSARY_PAGE_SIZE)
     page = max(0, min(page, pages - 1))
     selected = entries[page * GLOSSARY_PAGE_SIZE:(page + 1) * GLOSSARY_PAGE_SIZE]
