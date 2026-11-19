@@ -1,7 +1,7 @@
 import unittest
 import socket
 from unittest.mock import patch
-from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike, _parse_urlhaus_entries, _scan_url
+from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike, _parse_urlhaus_entries, _scan_url, scan_url
 
 class ScannerUnitTests(unittest.TestCase):
     def test_adds_https_scheme(self):
@@ -135,4 +135,12 @@ class SensitiveURLShortCircuitTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["chain"], [])
         self.assertIn("قبل استعلام DNS", result["reasons"][0])
 
+
+
+class ScannerFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unexpected_internal_error_returns_safe_result(self):
+        with patch("fahs.scanner._scan_url", side_effect=RuntimeError("private diagnostic")):
+            result = await scan_url("https://example.com")
+        self.assertEqual(result["level"], "تعذر إكمال الفحص")
+        self.assertNotIn("private diagnostic", " ".join(result["reasons"]))
 
