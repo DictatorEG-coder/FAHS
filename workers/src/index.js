@@ -25,7 +25,7 @@ async function doScan(env, chatId, uid, rawUrls, owner) {
     const ok = await rateLimit(env, `scan:${uid}`, 3600, limit);
     if (!ok) return send(env, chatId, "⏳ وصلت للحد الأقصى من عمليات الفحص هذه الساعة. حاول لاحقاً.", { reply_markup: SCAN_KB });
   }
-  const useVt = (await getSetting(env, "vt_enabled")) === "1" && !!env.VT_API_KEY;
+  const useVt = (await getSetting(env, "vt_enabled")) === "1" && !!env.VT_API_KEY && env.VT_EXTERNAL_SCAN_CONSENT === "1";
   for (const raw of rawUrls) {
     const wait = await send(env, chatId, "⏳ جارٍ فحص الرابط... قد يستغرق حتى 20 ثانية.");
     let res;
