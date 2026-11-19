@@ -144,6 +144,7 @@ async def send_scan(message: Message, raw: str) -> bool:
         return False
     events.append(now)
     result = await scan_url(raw)
+    db.record_scan(result["level"])
     reasons = "\n".join("• " + escape(x) for x in result["reasons"])
     host = escape(result.get("host") or "غير متاح")
     source = escape(result.get("source") or "تحليل محلي")
@@ -217,10 +218,12 @@ async def delete_my_data(message: Message):
 async def admin_stats(message: Message):
     if not message.from_user or message.from_user.id not in settings.admin_ids:
         return
-    users, reminders, groups = db.stats()
+    users, reminders, groups, scans, levels = db.stats()
+    level_lines = "\n".join(f"• {escape(level)}: {count}" for level, count in sorted(levels.items()))
     await message.answer(
         f"<b>لوحة فَحْص</b>\nالمستخدمون المسجلون: {users}\n"
-        f"المشتركون في التذكير: {reminders}\nالمجموعات المفعّل بها الفحص: {groups}")
+        f"المشتركون في التذكير: {reminders}\nالمجموعات المفعّل بها الفحص: {groups}\n"
+        f"إجمالي الفحوصات: {scans}\n<b>توزيع النتائج:</b>\n{level_lines or 'لا توجد فحوصات بعد'}")
 
 @router.message(F.text | F.caption)
 async def text_router(message: Message):

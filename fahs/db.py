@@ -28,6 +28,10 @@ def init_db():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY(chat_id, domain)
         );
+        CREATE TABLE IF NOT EXISTS scan_stats (
+            level TEXT PRIMARY KEY,
+            count INTEGER NOT NULL DEFAULT 0
+        );
         """)
         columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
         if "last_reminder_date" not in columns:
@@ -97,12 +101,25 @@ def get_group(chat_id: int):
         row = db.execute("SELECT enabled,auto_delete FROM group_settings WHERE chat_id=?", (chat_id,)).fetchone()
         return (bool(row["enabled"]), bool(row["auto_delete"])) if row else (False, False)
 
+def record_scan(level: str):
+    allowed = {"خطر حرج", "مرتفع", "متوسط", "مؤشرات اشتباه", "لم تظهر مؤشرات اشتباه أولية", "تعذر إكمال الفحص"}
+    if level not in allowed:
+        level = "تعذر إكمال الفحص"
+    with connect() as db:
+        db.execute(
+            "INSERT INTO scan_stats(level,count) VALUES(?,1) "
+            "ON CONFLICT(level) DO UPDATE SET count=count+1",
+            (level,),
+        )
+
 def stats():
     with connect() as db:
         users = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         reminders = db.execute("SELECT COUNT(*) FROM users WHERE reminders=1").fetchone()[0]
         groups = db.execute("SELECT COUNT(*) FROM group_settings WHERE enabled=1").fetchone()[0]
-        return users, reminders, groups
+        scans = db.execute("SELECT COALESCE(SUM(count),0) FROM scan_stats").fetchone()[0]
+        levels = {row["level"]: int(row["count"]) for row in db.execute("SELECT level,count FROM scan_stats")}
+        return users, reminders, groups, int(scans), levels
 
 def delete_user(user_id: int):
     with connect() as db:
