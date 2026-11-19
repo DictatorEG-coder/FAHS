@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -17,7 +17,38 @@ from fahs.config import settings
 
 router = Router()
 URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?<![@a-z0-9._-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?|(?<![0-9.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?:/[^\s<>]*)?)")
-SCAN_EVENTS = defaultdict(deque)
+# Bounded in-memory rate limits: per sender and across the whole bot process.
+SCAN_EVENTS = OrderedDict()
+GLOBAL_SCAN_EVENTS = deque()
+MAX_RATE_BUCKETS = 10_000
+USER_SCAN_LIMIT = 8
+GLOBAL_SCAN_LIMIT = 120
+RATE_WINDOW_SECONDS = 60
+
+def _trim_events(events: deque, now: float) -> None:
+    while events and now - events[0] >= RATE_WINDOW_SECONDS:
+        events.popleft()
+
+def _allow_scan(actor: int, now: float | None = None) -> bool:
+    now = time.monotonic() if now is None else now
+    _trim_events(GLOBAL_SCAN_EVENTS, now)
+    if len(GLOBAL_SCAN_EVENTS) >= GLOBAL_SCAN_LIMIT:
+        return False
+
+    events = SCAN_EVENTS.pop(actor, deque())
+    _trim_events(events, now)
+    if len(events) >= USER_SCAN_LIMIT:
+        SCAN_EVENTS[actor] = events
+        while len(SCAN_EVENTS) > MAX_RATE_BUCKETS:
+            SCAN_EVENTS.popitem(last=False)
+        return False
+
+    events.append(now)
+    SCAN_EVENTS[actor] = events
+    while len(SCAN_EVENTS) > MAX_RATE_BUCKETS:
+        SCAN_EVENTS.popitem(last=False)
+    GLOBAL_SCAN_EVENTS.append(now)
+    return True
 
 TIP_TEXT = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ\n\nاللهم صلِّ وسلم على نبينا محمد."
 
@@ -143,14 +174,9 @@ async def group_off(message: Message):
 
 async def send_scan(message: Message, raw: str) -> bool:
     actor = message.from_user.id if message.from_user else message.chat.id
-    now = time.monotonic()
-    events = SCAN_EVENTS[actor]
-    while events and now - events[0] > 60:
-        events.popleft()
-    if len(events) >= 8:
+    if not _allow_scan(actor):
         await message.reply("تم بلوغ حد الفحص المؤقت. انتظر دقيقة ثم حاول مجددًا.")
         return False
-    events.append(now)
     result = await scan_url(raw)
     db.record_scan(result["level"])
     reasons = "\n".join("• " + escape(x) for x in result["reasons"])
