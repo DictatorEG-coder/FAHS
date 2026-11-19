@@ -12,7 +12,7 @@
 - ⏳ فحص الصور والملفات: غير مفعّل حالياً (الروابط فقط) حسب الطلب.
 
 ## خطوات التشغيل
-1. **@BotFather** ← `/newbot` ← احفظ التوكن. (صورة البوت: `assets/logo.png` عبر `/setuserpic`)
+1. **@BotFather** ← `/newbot` ← احفظ التوكن. (صورة البوت: `assets/fahs-logo.svg` عبر `/setuserpic`)
 2. اعرف رقمك (ID) من **@userinfobot**.
 3. (اختياري لكن مهم) مفتاح **VirusTotal** المجاني من virustotal.com ← الملف الشخصي ← API Key.
 4. ارفع محتوى هذا المجلد إلى مستودع **GitHub** (يفضل Private).
