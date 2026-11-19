@@ -1,5 +1,7 @@
 import re
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from collections import defaultdict, deque
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
@@ -67,9 +69,13 @@ async def send_scan(message: Message, raw: str):
     result = await scan_url(raw)
     reasons = "\n".join("• " + x for x in result["reasons"])
     host = result.get("host") or "غير متاح"
+    checked_at = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d %H:%M")
+    redirects = max(0, len(result.get("chain", [])) - 1)
     text = (f"<b>نتيجة فحص فَحْص</b>\n"
             f"التصنيف: <b>{result['level']}</b>\n"
-            f"النطاق: <code>{host}</code>\n\n"
+            f"النطاق: <code>{host}</code>\n"
+            f"وقت الفحص: <code>{checked_at}</code>\n"
+            f"التحويلات المرصودة: <code>{redirects}</code>\n\n"
             f"<b>المؤشرات:</b>\n{reasons}\n\n"
             "<i>هذه قراءة أولية للمؤشرات وليست ضمانًا للأمان أو حكمًا قاطعًا. لا تُدخل بياناتك في موقع لم تتحقق منه.</i>")
     await message.reply(text, disable_web_page_preview=True)
