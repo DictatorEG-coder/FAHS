@@ -1,6 +1,7 @@
 """Conservative URL inspection. This is indicator-based, never a safety guarantee."""
 import ipaddress
 import json
+import logging
 import asyncio
 import re
 import socket
@@ -119,6 +120,42 @@ def _has_sensitive_query(url: str) -> bool:
             return True
     return False
 
+async def _read_head_response(reader) -> tuple[int, str | None]:
+    """Read a bounded HTTP response, skipping informational 1xx responses."""
+    total_header_bytes = 0
+    for _ in range(6):
+        status_line = await asyncio.wait_for(reader.readline(), timeout=settings.request_timeout)
+        total_header_bytes += len(status_line)
+        if len(status_line) > 4096 or not status_line.startswith(b"HTTP/"):
+            raise ValueError("استجابة HTTP غير مفهومة من الموقع")
+        try:
+            status_parts = status_line.split(b" ", 2)
+            if len(status_parts) < 2:
+                raise ValueError
+            status_code = int(status_parts[1])
+        except ValueError:
+            raise ValueError("تعذر قراءة رمز استجابة HTTP")
+
+        location = None
+        while True:
+            line = await asyncio.wait_for(reader.readline(), timeout=settings.request_timeout)
+            total_header_bytes += len(line)
+            if total_header_bytes > 16384:
+                raise ValueError("ترويسات استجابة الموقع أكبر من الحد المسموح")
+            if line in (b"\r\n", b"\n", b""):
+                break
+            if b":" not in line:
+                continue
+            name, value = line.split(b":", 1)
+            if name.strip().lower() == b"location" and location is None:
+                location = value.decode("latin-1").strip()
+
+        if 100 <= status_code < 200 and status_code != 101:
+            continue
+        return status_code, location
+    raise ValueError("أرسل الموقع عددًا غير معتاد من استجابات HTTP المؤقتة")
+
+
 async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
     """Follow only HEAD redirects, connecting to the exact IP that passed validation."""
     from urllib.parse import urljoin
@@ -161,28 +198,7 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
             )
             writer.write(request.encode("ascii"))
             await asyncio.wait_for(writer.drain(), timeout=settings.request_timeout)
-            status_line = await asyncio.wait_for(reader.readline(), timeout=settings.request_timeout)
-            if len(status_line) > 4096 or not status_line.startswith(b"HTTP/"):
-                return chain, "استجابة HTTP غير مفهومة من الموقع"
-            try:
-                status_code = int(status_line.split(b" ", 2)[1])
-            except (IndexError, ValueError):
-                return chain, "تعذر قراءة رمز استجابة HTTP"
-
-            location = None
-            total_header_bytes = len(status_line)
-            while True:
-                line = await asyncio.wait_for(reader.readline(), timeout=settings.request_timeout)
-                total_header_bytes += len(line)
-                if total_header_bytes > 16384:
-                    return chain, "ترويسات استجابة الموقع أكبر من الحد المسموح"
-                if line in (b"\r\n", b"\n", b""):
-                    break
-                if b":" not in line:
-                    continue
-                name, value = line.split(b":", 1)
-                if name.strip().lower() == b"location":
-                    location = value.decode("latin-1").strip()
+            status_code, location = await _read_head_response(reader)
         except (OSError, asyncio.TimeoutError, ssl.SSLError, UnicodeError):
             return chain, "تعذر تأكيد سلسلة التحويلات؛ قد يمنع الموقع طلبات الفحص"
         finally:
@@ -195,6 +211,8 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
 
         if status_code in {405, 501}:
             return chain, "الموقع لا يدعم طلب HEAD؛ تعذر تأكيد سلسلة التحويلات دون تنزيل محتوى الصفحة"
+        if status_code >= 400:
+            return chain, f"أعاد الموقع استجابة HTTP {status_code}؛ تعذر تأكيد الوجهة بصورة موثوقة"
         if status_code not in {301, 302, 303, 307, 308}:
             return chain, None
         if not location:
@@ -426,10 +444,11 @@ async def scan_url(raw: str) -> dict:
     async with _SCAN_SEMAPHORE:
         try:
             return await _scan_url(raw)
-        except Exception:
-            # A third-party DNS or socket failure must not crash the Telegram update handler.
-            import logging
-            logging.getLogger(__name__).exception("Unexpected URL scan failure")
+        except Exception as exc:
+            # Do not log exception text: network exceptions can contain full URLs or secrets.
+            logging.getLogger(__name__).error(
+                "Unexpected URL scan failure (%s)", type(exc).__name__
+            )
             return {
                 "level": "تعذر إكمال الفحص", "score": 0,
                 "reasons": ["حدث خطأ تقني أثناء الفحص؛ لم نتمكن من إصدار نتيجة موثوقة. حاول لاحقًا."],
