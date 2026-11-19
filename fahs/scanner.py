@@ -17,7 +17,7 @@ SUSPICIOUS_WORDS = {
     "تسجيل", "تحقق", "حساب", "جائزة", "هدية", "بنك", "محفظة"
 }
 SHORTENERS = {"bit.ly", "t.co", "tinyurl.com", "is.gd", "cutt.ly", "rb.gy", "shorturl.at", "ow.ly"}
-SENSITIVE_KEYS = {"token", "access_token", "auth", "key", "session", "code", "password", "otp", "secret", "sid"}
+SENSITIVE_KEY_RE = re.compile(r"(^|[_-])(token|auth|key|session|code|password|otp|secret|sid|ticket)([_-]|$)", re.I)
 
 def _is_public_ip(value: str) -> bool:
     ip = ipaddress.ip_address(value)
@@ -67,10 +67,12 @@ def _normalise(raw: str) -> str:
     if port and port not in {80, 443, 8080, 8443}:
         raise ValueError("منفذ غير معتاد؛ أُوقف الفحص الوقائي")
     host = parts.hostname.encode("idna").decode("ascii").lower().rstrip(".")
-    return urlunsplit((parts.scheme.lower(), host + (f":{port}" if port else ""), parts.path or "/", parts.query, ""))
+    authority = f"[{host}]" if ":" in host else host
+    authority += f":{port}" if port else ""
+    return urlunsplit((parts.scheme.lower(), authority, parts.path or "/", parts.query, ""))
 
 def _has_sensitive_query(url: str) -> bool:
-    return any(k.lower() in SENSITIVE_KEYS for k, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True))
+    return any(SENSITIVE_KEY_RE.search(k) for k, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True))
 
 async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
     chain, current = [], start
