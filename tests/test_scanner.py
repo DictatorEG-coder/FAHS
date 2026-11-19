@@ -1,5 +1,5 @@
 import unittest
-from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike
+from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike, _parse_urlhaus_entries
 
 class ScannerUnitTests(unittest.TestCase):
     def test_adds_https_scheme(self):
@@ -54,6 +54,17 @@ class ScannerUnitTests(unittest.TestCase):
 
     def test_allows_official_brand_subdomain(self):
         self.assertIsNone(_brand_lookalike("login.paypal.com"))
+
+    def test_parses_urlhaus_malware_feed_without_non_malware_entries(self):
+        payload = {
+            "query_status": "ok",
+            "urls": [
+                {"url": "https://bad.example/payload", "url_status": "online", "threat": "malware_download"},
+                {"url": "https://phish.example/login", "url_status": "online", "threat": "phishing"}
+            ]
+        }
+        self.assertEqual(_parse_urlhaus_entries(payload),
+                         {"https://bad.example/payload": "online"})
 
     def test_rejects_loopback_address(self):
         with self.assertRaises(ValueError):
