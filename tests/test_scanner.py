@@ -119,8 +119,6 @@ class ScannerUnitTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _resolve_public("::1")
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class SensitiveURLShortCircuitTests(unittest.IsolatedAsyncioTestCase):
@@ -144,3 +142,5 @@ class ScannerFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["level"], "تعذر إكمال الفحص")
         self.assertNotIn("private diagnostic", " ".join(result["reasons"]))
 
+if __name__ == "__main__":
+    unittest.main()
