@@ -72,36 +72,15 @@ export function normalizeUrl(raw) {
   let u;
   try { u = new URL(s); } catch { return { error: "الرابط غير صالح." }; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "يُفحص http و https فقط." };
+  if (u.username || u.password) return { error: "يحتوي الرابط على بيانات دخول؛ أوقفنا الفحص حفاظاً على الخصوصية." };
+  if (u.hostname.length > 253 || u.href.length > 2048) return { error: "الرابط أطول من الحد المسموح." };
   return { url: u, assumedScheme: !/^https?:\/\//i.test(raw.trim()) };
 }
 
-// ---------- تتبع التحويلات (HEAD فقط، بدون متابعة تلقائية، مع فحص كل قفزة)
-export async function followRedirects(startUrl, maxHops = 5) {
-  const chain = [startUrl.href];
-  let cur = startUrl;
-  for (let i = 0; i < maxHops; i++) {
-    if (isPrivateHost(cur.hostname)) return { chain, blocked: true };
-    let res;
-    try {
-      res = await fetch(cur.href, {
-        method: "HEAD",
-        redirect: "manual",
-        headers: { "user-agent": "Mozilla/5.0 (compatible; FAHS-LinkScanner/1.0)" },
-        signal: AbortSignal.timeout(5000),
-      });
-    } catch {
-      return { chain, unreachable: true };
-    }
-    const loc = res.headers.get("location");
-    if (res.status >= 300 && res.status < 400 && loc) {
-      let next;
-      try { next = new URL(loc, cur); } catch { break; }
-      if (next.protocol !== "http:" && next.protocol !== "https:") break;
-      chain.push(next.href);
-      cur = next;
-    } else break;
-  }
-  return { chain, final: cur };
+// لا يفتح FAHS الروابط ولا يتصل بوجهاتها. تتبع التحويلات عبر fetch داخل Worker
+// لا يتيح تثبيت عنوان IP بعد DNS؛ لذلك نمتنع عنه لتجنب SSRF وDNS rebinding.
+export async function followRedirects(startUrl) {
+  return { chain: [startUrl.href], final: startUrl, unresolved: true };
 }
 
 // ---------- التحليل المحلي
@@ -249,7 +228,7 @@ export function formatReport({ original, chain, finalUrl, local, vt, vtEnabled, 
   } else if (vtEnabled && vt?.error) {
     lines.push(`🛡 <b>VirusTotal:</b> ${VT_ERR[vt.error] || "غير متاح"}`);
   } else {
-    lines.push("🛡 <b>VirusTotal:</b> غير مفعّل (التحليل المحلي فقط)");
+    lines.push(vt?.skipped === "sensitive_url" ? "🛡 <b>VirusTotal:</b> لم نرسل الرابط لأنه قد يحتوي على رمز أو بيانات خاصة." : "🛡 <b>VirusTotal:</b> غير مفعّل (التحليل المحلي فقط)");
   }
   if (local.reasons.length) {
     lines.push("");
@@ -265,7 +244,7 @@ export function formatReport({ original, chain, finalUrl, local, vt, vtEnabled, 
 const shorten = (s, n) => (s.length > n ? s.slice(0, n) + "…" : s);
 
 // ---------- الدالة الرئيسية
-export async function scanUrl(env, raw, { useVt = true } = {}) {
+export async function scanUrl(env, raw, { useVt = false } = {}) {
   const n = normalizeUrl(raw);
   if (n.error) return { error: n.error };
   const url = n.url;
@@ -275,12 +254,12 @@ export async function scanUrl(env, raw, { useVt = true } = {}) {
   const notes = [];
   if (n.assumedScheme) notes.push("لم يحدد الرابط بروتوكولاً، افترضنا http.");
   const red = await followRedirects(url);
-  if (red.blocked) notes.push("أحد التحويلات يشير إلى عنوان داخلي (محجوب).");
-  if (red.unreachable && red.chain.length === 1) notes.push("تعذر الوصول للموقع لتتبع التحويلات، فُحص الرابط كما هو.");
+  notes.push("لم نفتح الرابط أو نتصل بوجهته؛ لذلك لا يمكن تأكيد الوجهة النهائية للروابط المختصرة.");
   const finalUrl = red.final && red.chain.length > 1 ? red.final : null;
   const local = analyzeLocal(url, red.chain.length, finalUrl);
   const target = (finalUrl || url).href;
-  const vt = useVt ? await vtLookup(env, target) : { skipped: "disabled" };
+  const sensitive = /(?:^|[?&])(?:token|access_token|auth|session|code|otp|password|secret|key|sid|ticket|jwt|signature)=/i.test(url.search);
+  const vt = useVt && !sensitive ? await vtLookup(env, target) : { skipped: sensitive ? "sensitive_url" : "disabled" };
   const verdict = verdictFrom(local.score, vt);
   const text = formatReport({ original: url, chain: red.chain, finalUrl, local, vt, vtEnabled: useVt && !!env.VT_API_KEY, verdict, notes });
   return { text, verdict, host: (finalUrl || url).hostname, vtLink: vt?.link || null };
