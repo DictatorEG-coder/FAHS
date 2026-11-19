@@ -6,12 +6,17 @@ import { handleAdminCallback, handleAdminMessage, adminHome, processBroadcasts }
 import { scanUrl, extractUrls } from "./scanner.js";
 import { now } from "./util.js";
 
-const isOwnerId = (env, id) => String(id) === String(env.OWNER_ID);
+const isOwnerId = (env, id) => {
+  const ids = [env.OWNER_ID, ...(env.ADMIN_IDS || "").split(",")].map((x) => String(x || "").trim()).filter(Boolean);
+  return ids.includes(String(id));
+};
 
 const COMMANDS = [
   { command: "start", description: "القائمة الرئيسية" },
   { command: "scan", description: "فحص رابط" },
   { command: "help", description: "المساعدة" },
+  { command: "my_id", description: "عرض معرّفك في تيليجرام" },
+  { command: "delete_my_data", description: "حذف بياناتك من قاعدة البوت" },
   { command: "fahs_on", description: "تفعيل فحص روابط المجموعة للمشرفين" },
   { command: "fahs_off", description: "إيقاف فحص روابط المجموعة للمشرفين" },
   { command: "fahs_status", description: "حالة حماية المجموعة" },
@@ -94,6 +99,15 @@ async function onMessage(env, ctx, m) {
   const cmd = text.startsWith("/") ? text.split(/[\s@]/)[0].toLowerCase() : null;
 
   if (cmd === "/start" || cmd === "/menu") { await clearState(env, uid); return showHome(env, m.chat.id, owner); }
+  if (cmd === "/my_id") return send(env, m.chat.id, `معرّفك في تيليجرام: <code>${uid}</code>`);
+  if (cmd === "/delete_my_data") {
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM users WHERE id=?").bind(uid),
+      env.DB.prepare("DELETE FROM states WHERE user_id=?").bind(uid),
+      env.DB.prepare("DELETE FROM rl WHERE key IN (?,?,?)").bind("flood:" + uid, "scan:" + uid, "group-scan:" + uid),
+    ]);
+    return send(env, m.chat.id, "🧹 حُذفت بيانات حسابك وإعداداتك المحفوظة لدى فَحْص. لا نخزّن روابط الفحص كاملة.");
+  }
   if (cmd === "/help") return send(env, m.chat.id, "ℹ️ <b>المساعدة</b>\n\nأرسل لي أي رابط وسأفحصه، أو تصفّح الأقسام من القائمة.\nيمكنك إرسال حتى 3 روابط في رسالة واحدة.\n\n🔒 لا نحفظ الروابط التي تفحصها.", { reply_markup: await mainMenu(env, owner) });
   if (cmd === "/admin" && owner) { await clearState(env, uid); return send(env, m.chat.id, "⚙️ <b>لوحة الإدارة</b>", { reply_markup: kb([[btn("فتح لوحة الإدارة", "a:home")]]) }); }
   if (cmd === "/scan") { await setState(env, uid, "await_url"); return send(env, m.chat.id, "🔍 أرسل الرابط الذي تريد فحصه:"); }
@@ -164,8 +178,8 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
-      if (!env.BOT_TOKEN || !env.OWNER_ID || !env.WEBHOOK_SECRET) {
-        return new Response("FAHS: missing secrets (BOT_TOKEN / OWNER_ID / WEBHOOK_SECRET)", { status: 500 });
+      if (!env.BOT_TOKEN || (!env.OWNER_ID && !env.ADMIN_IDS) || !env.WEBHOOK_SECRET) {
+        return new Response("FAHS: missing secrets (BOT_TOKEN / OWNER_ID or ADMIN_IDS / WEBHOOK_SECRET)", { status: 500 });
       }
       if (url.pathname === "/webhook" && request.method === "POST") {
         if (!safeEqual(request.headers.get("x-telegram-bot-api-secret-token") || "", env.WEBHOOK_SECRET)) {
