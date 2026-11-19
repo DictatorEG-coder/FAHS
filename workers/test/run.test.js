@@ -8,9 +8,11 @@ const t = async (name, fn) => { try { await fn(); pass++; console.log("✅", nam
 
 // ---- محاكاة الشبكة
 const calls = [];
+const externalCalls = [];
 let msgId = 100;
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
+  if (!u.startsWith("https://api.telegram.org/")) externalCalls.push(u);
   const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
   if (u.startsWith("https://api.telegram.org/")) {
     const method = u.split("/").pop();
@@ -84,7 +86,7 @@ await t("المصطلحات: 24 مصطلحاً", async () => {
 await t("فحص رابط مشبوه محلياً دون إرسال تلقائي إلى VirusTotal", async () => {
   reset(); await handleUpdate(env, ctx, msg(50, "شوف http://paypal.login-secure.xyz/verify"));
   const e = last("editMessageText"); assert.ok(e.body.text.includes("خطير"), e.body.text);
-  assert.ok(!calls.some((c) => String(c.method).includes("virustotal")));
+  assert.equal(externalCalls.length, 0, "the scanner must not contact external services by default");
   assert.ok(!e.body.reply_markup.inline_keyboard.flat().some((b) => b.url?.includes("virustotal.com/gui/url/")));
 });
 await t("الرابط المختصر لا يُفتح ولا تُخمن وجهته", async () => {
