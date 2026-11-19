@@ -81,7 +81,7 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
         for _ in range(settings.max_redirects + 1):
             parts = urlsplit(current)
             try:
-                _resolve_public(parts.hostname or "")
+                await asyncio.to_thread(_resolve_public, parts.hostname or "")
             except ValueError as exc:
                 return chain, str(exc)
             chain.append(current)
@@ -134,7 +134,7 @@ async def _scan_url(raw: str) -> dict:
         url = _normalise(raw)
         parts = urlsplit(url)
         host = parts.hostname or ""
-        addresses = _resolve_public(host)
+        addresses = await asyncio.to_thread(_resolve_public, host)
     except (ValueError, UnicodeError) as exc:
         return {"level": "تعذر إكمال الفحص", "score": 0, "reasons": [str(exc)], "url": "", "host": "", "chain": []}
 
