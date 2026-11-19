@@ -32,6 +32,15 @@ def init_db():
             level TEXT PRIMARY KEY,
             count INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS content_items (
+            category TEXT NOT NULL,
+            item_key TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            deleted INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(category, item_key)
+        );
         """)
         columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
         if "last_reminder_date" not in columns:
@@ -151,3 +160,58 @@ def list_group_domains(chat_id: int) -> list[str]:
     with connect() as db:
         rows = db.execute("SELECT domain FROM group_allowlist WHERE chat_id=? ORDER BY domain", (chat_id,)).fetchall()
         return [row["domain"] for row in rows]
+
+
+def list_users():
+    """Return registered private-chat user IDs for admin broadcasts."""
+    with connect() as db:
+        rows = db.execute("SELECT user_id FROM users ORDER BY user_id").fetchall()
+        return [int(row["user_id"]) for row in rows]
+
+
+def get_content_overrides(category: str) -> dict[str, dict]:
+    with connect() as db:
+        rows = db.execute(
+            "SELECT item_key,title,body,deleted FROM content_items WHERE category=?",
+            (category,),
+        ).fetchall()
+        return {
+            row["item_key"]: {
+                "title": row["title"],
+                "body": row["body"],
+                "deleted": bool(row["deleted"]),
+            }
+            for row in rows
+        }
+
+
+def save_content_item(category: str, item_key: str, title: str, body: str):
+    with connect() as db:
+        db.execute(
+            """INSERT INTO content_items(category,item_key,title,body,deleted)
+            VALUES(?,?,?,?,0)
+            ON CONFLICT(category,item_key) DO UPDATE SET
+            title=excluded.title, body=excluded.body, deleted=0,
+            updated_at=CURRENT_TIMESTAMP""",
+            (category, item_key, title, body),
+        )
+
+
+def hide_content_item(category: str, item_key: str):
+    with connect() as db:
+        db.execute(
+            """INSERT INTO content_items(category,item_key,title,body,deleted)
+            VALUES(?,?, '', '', 1)
+            ON CONFLICT(category,item_key) DO UPDATE SET deleted=1,
+            updated_at=CURRENT_TIMESTAMP""",
+            (category, item_key),
+        )
+
+
+def get_content_item(category: str, item_key: str):
+    with connect() as db:
+        row = db.execute(
+            "SELECT title,body,deleted FROM content_items WHERE category=? AND item_key=?",
+            (category, item_key),
+        ).fetchone()
+        return dict(row) if row else None
