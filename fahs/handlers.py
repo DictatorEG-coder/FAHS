@@ -121,7 +121,13 @@ async def group_delete_off(message: Message):
     await message.reply("تم إيقاف الحذف التلقائي.")
 
 
-@router.message(Command("admin"))
+
+@router.message(Command("delete_my_data"))
+async def delete_my_data(message: Message):
+    if message.from_user:
+        db.delete_user(message.from_user.id)
+        await message.answer("حُذفت إعداداتك ومعرّفك من قاعدة بيانات فَحْص. لا يشمل ذلك سجل رسائل تيليجرام أو بيانات تحتفظ بها المنصة.")
+\n@router.message(Command("admin"))
 async def admin_stats(message: Message):
     if not message.from_user or message.from_user.id not in settings.admin_ids:
         return
