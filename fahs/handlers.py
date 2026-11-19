@@ -42,7 +42,8 @@ async def group_on(message: Message):
     if member.status not in {"administrator", "creator"}:
         await message.reply("هذا الأمر متاح لمشرفي المجموعة فقط.")
         return
-    db.set_group(message.chat.id, True)
+    _, auto_delete = db.get_group(message.chat.id)
+    db.set_group(message.chat.id, True, auto_delete)
     await message.reply("تم تفعيل فحص الروابط التي تصل إلى البوت. يعتمد الرصد على رسائل تيليجرام التي يسمح إعداد الخصوصية والصلاحيات للبوت برؤيتها.")
 
 @router.message(Command("fahs_off"))
@@ -53,10 +54,10 @@ async def group_off(message: Message):
     if member.status not in {"administrator", "creator"}:
         await message.reply("هذا الأمر متاح لمشرفي المجموعة فقط.")
         return
-    db.set_group(message.chat.id, False)
+    db.set_group(message.chat.id, False, False)
     await message.reply("تم إيقاف فحص روابط المجموعة.")
 
-async def send_scan(message: Message, raw: str):
+async def send_scan(message: Message, raw: str) -> bool:
     actor = message.from_user.id if message.from_user else message.chat.id
     now = time.monotonic()
     events = SCAN_EVENTS[actor]
@@ -64,7 +65,7 @@ async def send_scan(message: Message, raw: str):
         events.popleft()
     if len(events) >= 8:
         await message.reply("تم بلوغ حد الفحص المؤقت. انتظر دقيقة ثم حاول مجددًا.")
-        return
+        return False
     events.append(now)
     result = await scan_url(raw)
     reasons = "\n".join("• " + x for x in result["reasons"])
@@ -78,7 +79,46 @@ async def send_scan(message: Message, raw: str):
             f"التحويلات المرصودة: <code>{redirects}</code>\n\n"
             f"<b>المؤشرات:</b>\n{reasons}\n\n"
             "<i>هذه قراءة أولية للمؤشرات وليست ضمانًا للأمان أو حكمًا قاطعًا. لا تُدخل بياناتك في موقع لم تتحقق منه.</i>")
+    if message.chat.type in {"group", "supergroup"}:
+        enabled, auto_delete = db.get_group(message.chat.id)
+        if enabled and auto_delete and result["level"] in {"خطر حرج", "مرتفع"}:
+            try:
+                await message.delete()
+                await message.answer("🛑 <b>حُذف رابط يحمل مؤشرات خطورة مرتفعة.</b>\\n" + text, disable_web_page_preview=True)
+                return True
+            except Exception:
+                await message.reply("🛑 رُصد رابط عالي الخطورة، لكن تعذر حذف الرسالة. راجع صلاحيات البوت.", disable_web_page_preview=True)
+                return False
     await message.reply(text, disable_web_page_preview=True)
+    return False
+
+
+@router.message(Command("fahs_delete_on"))
+async def group_delete_on(message: Message):
+    if message.chat.type not in {"group", "supergroup"} or not message.from_user:
+        return
+    member = await message.chat.get_member(message.from_user.id)
+    if member.status not in {"administrator", "creator"}:
+        await message.reply("هذا الأمر متاح لمشرفي المجموعة فقط.")
+        return
+    bot_member = await message.chat.get_member((await message.bot.get_me()).id)
+    if bot_member.status != "administrator" or not getattr(bot_member, "can_delete_messages", False):
+        await message.reply("يجب ترقية البوت إلى مشرف ومنحه صلاحية حذف الرسائل أولًا.")
+        return
+    db.set_group(message.chat.id, True, True)
+    await message.reply("فُعّل الحذف التلقائي للروابط المصنفة خطرًا حرجًا أو مرتفعًا. قد تحدث نتائج اشتباه خاطئة؛ ويمكن إيقافه بالأمر /fahs_delete_off.")
+
+@router.message(Command("fahs_delete_off"))
+async def group_delete_off(message: Message):
+    if message.chat.type not in {"group", "supergroup"} or not message.from_user:
+        return
+    member = await message.chat.get_member(message.from_user.id)
+    if member.status not in {"administrator", "creator"}:
+        await message.reply("هذا الأمر متاح لمشرفي المجموعة فقط.")
+        return
+    enabled, _ = db.get_group(message.chat.id)
+    db.set_group(message.chat.id, enabled, False)
+    await message.reply("تم إيقاف الحذف التلقائي.")
 
 
 @router.message(Command("admin"))
@@ -104,7 +144,9 @@ async def text_router(message: Message):
         return
     for match in matches[:3]:
         raw = match.rstrip(".,،؛!؟)]}")
-        await send_scan(message, raw)
+        deleted = await send_scan(message, raw)
+        if deleted:
+            break
 
 @router.callback_query(F.data == "home")
 async def home(call: CallbackQuery):
