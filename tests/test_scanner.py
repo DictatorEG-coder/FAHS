@@ -1,7 +1,7 @@
 import unittest
 import socket
 from unittest.mock import patch
-from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike, _parse_urlhaus_entries
+from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike, _parse_urlhaus_entries, _scan_url
 
 class ScannerUnitTests(unittest.TestCase):
     def test_adds_https_scheme(self):
@@ -121,3 +121,18 @@ class ScannerUnitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SensitiveURLShortCircuitTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sensitive_query_stops_before_feed_or_dns_calls(self):
+        from unittest.mock import AsyncMock
+        with patch("fahs.scanner._openphish_entries", new=AsyncMock(side_effect=AssertionError("feed should not run"))), \
+             patch("fahs.scanner._urlhaus_entries", new=AsyncMock(side_effect=AssertionError("feed should not run"))), \
+             patch("fahs.scanner._resolve_public", side_effect=AssertionError("DNS should not run")):
+            result = await _scan_url("https://example.com/login?access_token=secret")
+        self.assertEqual(result["level"], "تعذر إكمال الفحص")
+        self.assertEqual(result["host"], "example.com")
+        self.assertEqual(result["chain"], [])
+        self.assertIn("قبل استعلام DNS", result["reasons"][0])
+
+
