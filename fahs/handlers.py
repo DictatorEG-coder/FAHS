@@ -81,7 +81,7 @@ async def send_scan(message: Message, raw: str) -> bool:
             "<i>هذه قراءة أولية للمؤشرات وليست ضمانًا للأمان أو حكمًا قاطعًا. لا تُدخل بياناتك في موقع لم تتحقق منه.</i>")
     if message.chat.type in {"group", "supergroup"}:
         enabled, auto_delete = db.get_group(message.chat.id)
-        if enabled and auto_delete and result["level"] in {"خطر حرج", "مرتفع"}:
+        if enabled and auto_delete and message.text is not None and result["level"] in {"خطر حرج", "مرتفع"}:
             try:
                 await message.delete()
                 await message.answer("🛑 <b>حُذف رابط يحمل مؤشرات خطورة مرتفعة.</b>\\n" + text, disable_web_page_preview=True)
