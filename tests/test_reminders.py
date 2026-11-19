@@ -37,7 +37,7 @@ class ReminderDeliveryTests(unittest.IsolatedAsyncioTestCase):
             mark_sent.assert_not_called()
 
             await _deliver_user(bot, 456, "2026-11-19", retry_after, 100.0 + RETRY_DELAY_SECONDS)
-            bot.send_message.assert_awaited_twice()
+            self.assertEqual(bot.send_message.await_count, 2)
             mark_sent.assert_called_once_with(456, "2026-11-19")
             self.assertNotIn(456, retry_after)
 
