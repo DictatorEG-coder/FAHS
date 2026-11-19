@@ -14,7 +14,7 @@ from fahs.scanner import scan_url
 from fahs.config import settings
 
 router = Router()
-URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?:/[^\s<>]*)?)")
+URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?<![@a-z0-9._-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?|(?<![0-9.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?:/[^\s<>]*)?)")
 SCAN_EVENTS = defaultdict(deque)
 
 TIP_TEXT = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ\n\nاللهم صلِّ وسلم على نبينا محمد."
