@@ -217,8 +217,8 @@ async def emergency_detail(call: CallbackQuery):
 
 @router.callback_query(F.data == "tip")
 async def tip(call: CallbackQuery):
-    import random
-    await call.message.edit_text("💡 <b>نصيحة اليوم</b>\n" + random.choice(TIPS), reply_markup=back_menu())
+    index = datetime.now(ZoneInfo("Africa/Cairo")).timetuple().tm_yday % len(TIPS)
+    await call.message.edit_text("💡 <b>نصيحة اليوم</b>\n" + TIPS[index], reply_markup=back_menu())
     await call.answer()
 
 @router.callback_query(F.data == "about")
