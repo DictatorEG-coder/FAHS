@@ -323,13 +323,15 @@ async def _scan_url(raw: str) -> dict:
     if url in feed_entries:
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابق الرابط حرفيًا مع مؤشر وارد في مصدر OpenPhish المفعّل."],
-                "url": url, "host": host, "ips": [], "chain": [], "source": "OpenPhish"}
+                "url": url, "host": host, "ips": [], "chain": [], "source": "OpenPhish",
+                "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
     if url in urlhaus_entries:
         status = urlhaus_entries[url]
         severity = "خطر حرج" if status == "online" else "مرتفع"
         return {"level": severity, "score": 10 if status == "online" else 7,
                 "reasons": [f"الرابط مطابق لسجل URLhaus الخاص بتوزيع برمجيات خبيثة؛ الحالة المسجلة: {status}."],
-                "url": url, "host": host, "ips": [], "chain": [], "source": "URLhaus"}
+                "url": url, "host": host, "ips": [], "chain": [], "source": "URLhaus",
+                "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
     try:
         addresses = await asyncio.to_thread(_resolve_public, host)
     except (ValueError, UnicodeError) as exc:
