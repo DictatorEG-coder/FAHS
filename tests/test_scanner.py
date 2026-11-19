@@ -39,6 +39,15 @@ class ScannerUnitTests(unittest.TestCase):
     def test_detects_api_key_parameter(self):
         self.assertTrue(_has_sensitive_query("https://example.com/?api_key=secret"))
 
+    def test_detects_camel_case_access_token(self):
+        self.assertTrue(_has_sensitive_query("https://example.com/?accessToken=secret"))
+
+    def test_detects_camel_case_api_key(self):
+        self.assertTrue(_has_sensitive_query("https://example.com/?apiKey=secret"))
+
+    def test_detects_verification_code(self):
+        self.assertTrue(_has_sensitive_query("https://example.com/?verificationCode=123456"))
+
     def test_normalises_ipv6_authority(self):
         self.assertEqual(_normalise("https://[2606:4700:4700::1111]"),
                          "https://[2606:4700:4700::1111]/")
