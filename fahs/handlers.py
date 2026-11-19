@@ -546,7 +546,6 @@ async def broadcast_confirm(call: CallbackQuery):
     await status.edit_text(
         f"<b>انتهت الإذاعة</b>\nإجمالي المستلمين: {len(recipients)}\n"
         f"نجح الإرسال: {sent}\nتعذر الإرسال: {failed}")
-    await call.answer("اكتملت الإذاعة.")
 
 
 @router.message(Command("cancel"))
