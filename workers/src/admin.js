@@ -7,6 +7,7 @@ import {
 import { entitiesToHtml, esc, now } from "./util.js";
 
 const BACK_HOME = [btn("🔙 لوحة الإدارة", "a:home"), btn("🏠 الرئيسية", "home")];
+const isConfiguredAdmin = (env, id) => [env.OWNER_ID, ...(env.ADMIN_IDS || "").split(",")].map((x) => String(x || "").trim()).includes(String(id));
 
 export async function adminHome(env, msg) {
   const t = "⚙️ <b>لوحة الإدارة</b>\n\nاختر ما تريد:";
@@ -240,8 +241,11 @@ export async function handleAdminMessage(env, m, st, ctx) {
 
   switch (st.state) {
     case "new_section": {
-      const title = text.trim().slice(0, 60);
+      const title = text.trim();
       if (!title) return send(env, chat, "أرسل اسماً نصياً.");
+      if (title.length > 90) return send(env, chat, "⚠️ الحد الأقصى لاسم القسم 90 حرفاً.");
+      const count = (await first(env, "SELECT COUNT(*) n FROM sections WHERE parent_id=?", st.data.parent))?.n ?? 0;
+      if (count >= 80) return send(env, chat, "⚠️ بلغ هذا المستوى الحد الأقصى: 80 قسماً فرعياً.");
       const pos = (await first(env, "SELECT COALESCE(MAX(position),-1)+1 p FROM sections WHERE parent_id=?", st.data.parent))?.p ?? 0;
       const r = await run(env, "INSERT INTO sections (parent_id,title,position,visible) VALUES (?,?,?,1)", st.data.parent, title, pos);
       await clearState(env, uid);
@@ -249,16 +253,19 @@ export async function handleAdminMessage(env, m, st, ctx) {
       return done(`✅ تم إنشاء «${esc(title)}».\nافتحه وأضف المحتوى والأزرار.`, [btn("📂 فتح القسم", `a:t:${id}`), btn("🔙 رجوع", `a:t:${st.data.parent}`)]);
     }
     case "rename": {
-      const title = text.trim().slice(0, 60);
+      const title = text.trim();
       if (!title) return send(env, chat, "أرسل اسماً نصياً.");
+      if (title.length > 90) return send(env, chat, "⚠️ الحد الأقصى للاسم 90 حرفاً.");
       await run(env, "UPDATE sections SET title=? WHERE id=?", title, st.data.id);
       await clearState(env, uid);
       return done("✅ تم تغيير الاسم.", [btn("📂 رجوع للقسم", `a:t:${st.data.id}`)]);
     }
     case "new_block": {
       const id = st.data.id;
+      const count = (await first(env, "SELECT COUNT(*) n FROM blocks WHERE section_id=?", id))?.n ?? 0;
+      if (count >= 80) return send(env, chat, "⚠️ بلغ هذا القسم الحد الأقصى: 80 عنصراً.");
       let type, content, caption = null;
-      if (m.text) { type = "text"; content = entitiesToHtml(m.text, m.entities); if (content.length > 3800) return send(env, chat, "⚠️ النص طويل جداً (الحد 3800 حرف تقريباً). قسّمه إلى عدة عناصر."); }
+      if (m.text) { type = "text"; if (m.text.length > 3500) return send(env, chat, "⚠️ الحد الأقصى للنص 3500 حرف. قسّمه إلى عناصر."); content = entitiesToHtml(m.text, m.entities); }
       else if (m.photo) { type = "photo"; content = m.photo[m.photo.length - 1].file_id; }
       else if (m.video) { type = "video"; content = m.video.file_id; }
       else if (m.animation) { type = "animation"; content = m.animation.file_id; }
@@ -273,8 +280,10 @@ export async function handleAdminMessage(env, m, st, ctx) {
     case "new_link": {
       const parts = text.split("|");
       const url = (parts[1] || "").trim();
-      const title = (parts[0] || "").trim().slice(0, 40);
-      if (!title || !/^https?:\/\/\S+$/i.test(url)) return send(env, chat, "⚠️ الصيغة: <code>العنوان | https://example.com</code>");
+      const title = (parts[0] || "").trim();
+      let parsed;
+      try { parsed = new URL(url); } catch {}
+      if (!title || title.length > 60 || !parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || url.length > 2048) return send(env, chat, "⚠️ الصيغة: <code>عنوان (حتى 60 حرفاً) | https://example.com</code>");
       const id = st.data.id;
       const pos = (await first(env, "SELECT COALESCE(MAX(position),-1)+1 p FROM blocks WHERE section_id=?", id))?.p ?? 0;
       await run(env, "INSERT INTO blocks (section_id,position,type,content,caption) VALUES (?,?,'link',?,?)", id, pos, url, title);
@@ -293,7 +302,7 @@ export async function handleAdminMessage(env, m, st, ctx) {
       const unban = text.trim().startsWith("-");
       const id = parseInt(text.replace(/[^\d]/g, ""), 10);
       if (!id) return send(env, chat, "⚠️ أرسل رقم ID صحيحاً.");
-      if (String(id) === String(env.OWNER_ID)) return send(env, chat, "لا يمكنك حظر نفسك.");
+      if (isConfiguredAdmin(env, id)) return send(env, chat, "لا يمكنك حظر أحد مشرفي البوت.");
       await run(env, "INSERT INTO users (id,first_seen,last_seen,banned) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET banned=excluded.banned", id, now(), now(), unban ? 0 : 1);
       await clearState(env, uid);
       return done(unban ? `✅ أُلغي الحظر عن <code>${id}</code>.` : `🚫 تم حظر <code>${id}</code>.`, BACK_HOME);
@@ -306,6 +315,7 @@ export async function handleAdminMessage(env, m, st, ctx) {
         if (!value || value < 1 || value > 1000) return send(env, chat, "⚠️ أرسل رقماً بين 1 و1000.");
       } else {
         if (!m.text) return send(env, chat, "⚠️ أرسل نصاً.");
+        if (m.text.length > 3500) return send(env, chat, "⚠️ الحد الأقصى للنص 3500 حرف.");
         value = entitiesToHtml(m.text, m.entities);
       }
       await setSetting(env, key, value);
