@@ -17,7 +17,7 @@ async def reminder_loop(bot: Bot):
         day = now.date().isoformat()
         if now.hour == 10 and now.minute < 5:
             for user_id in db.reminder_users():
-                if db.reminder_sent_today(user_id, day):
+                if not db.reminder_due(user_id, day):
                     continue
                 try:
                     await bot.send_message(user_id, MESSAGES[now.timetuple().tm_yday % len(MESSAGES)])
