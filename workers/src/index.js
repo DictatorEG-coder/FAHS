@@ -58,7 +58,7 @@ async function onMessage(env, ctx, m) {
   if (m.chat.type !== "private") {
     const uid = m.from.id;
     const groupText = m.text || m.caption || "";
-    const groupCmd = groupText.startsWith("/") ? groupText.split(/[\\s@]/)[0].toLowerCase() : null;
+    const groupCmd = groupText.startsWith("/") ? groupText.split(/[\s@]/)[0].toLowerCase() : null;
     if (["/fahs_on", "/fahs_off", "/fahs_status"].includes(groupCmd)) {
       const member = await tg(env, "getChatMember", { chat_id: m.chat.id, user_id: uid });
       const status = member?.result?.status;
