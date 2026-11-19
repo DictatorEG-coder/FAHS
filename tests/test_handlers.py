@@ -98,3 +98,48 @@ class SecurityContentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EditableContentTests(unittest.TestCase):
+    def test_admin_categories_cover_educational_content_not_link_scanner(self):
+        from fahs.handlers import CONTENT_CATEGORIES
+        self.assertEqual(
+            set(CONTENT_CATEGORIES),
+            {"scams", "ai_scams", "data", "protection", "emergency", "glossary"},
+        )
+        self.assertNotIn("scanner", CONTENT_CATEGORIES)
+
+    def test_catalog_applies_edits_additions_and_deletions(self):
+        from unittest.mock import patch
+        from fahs.handlers import _catalog_items
+        with patch("fahs.handlers.db.get_content_overrides", return_value={
+            "تصيد عبر الرسائل": {
+                "title": "تصيد برسالة مزيفة (محدّث)",
+                "body": "شرح جديد قابل للتعديل.",
+                "deleted": False,
+            },
+            "hidden-item": {
+                "title": "محتوى محذوف",
+                "body": "لن يظهر",
+                "deleted": True,
+            },
+            "custom-item": {
+                "title": "احتيال جديد",
+                "body": "شرح طريقة الاحتيال الجديدة.",
+                "deleted": False,
+            },
+        }):
+            items = _catalog_items("scams")
+        titles = [title for _, title, _ in items]
+        self.assertIn("تصيد برسالة مزيفة (محدّث)", titles)
+        self.assertIn("احتيال جديد", titles)
+        self.assertNotIn("محتوى محذوف", titles)
+
+    def test_emergency_and_glossary_use_editable_catalogs(self):
+        from unittest.mock import patch
+        from fahs.handlers import _catalog_items
+        with patch("fahs.handlers.db.get_content_overrides", return_value={}):
+            self.assertGreaterEqual(len(_catalog_items("emergency")), 12)
+            self.assertGreaterEqual(len(_catalog_items("glossary")), 10)
+
+
