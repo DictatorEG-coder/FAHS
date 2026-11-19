@@ -93,8 +93,9 @@ async def text_router(message: Message):
     matches = URL_RE.findall(message.text or "")
     if not matches:
         return
-    raw = matches[0].rstrip(".,،؛!؟)]}")
-    await send_scan(message, raw)
+    for match in matches[:3]:
+        raw = match.rstrip(".,،؛!؟)]}")
+        await send_scan(message, raw)
 
 @router.callback_query(F.data == "home")
 async def home(call: CallbackQuery):
