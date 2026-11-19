@@ -33,6 +33,15 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(db.get_reminders(123))
         self.assertFalse(db.reminder_due(123, "2026-11-19"))
 
+    def test_scan_statistics_are_aggregated_without_url_or_user_fields(self):
+        db.record_scan("مرتفع")
+        db.record_scan("مرتفع")
+        db.record_scan("لم تظهر مؤشرات اشتباه أولية")
+        users, reminders, groups, scans, levels = db.stats()
+        self.assertEqual(scans, 3)
+        self.assertEqual(levels["مرتفع"], 2)
+        self.assertEqual(levels["لم تظهر مؤشرات اشتباه أولية"], 1)
+
     def test_reminder_interval_is_limited_to_one_or_two_days(self):
         db.touch_user(456)
         db.set_reminder_interval(456, 2)
