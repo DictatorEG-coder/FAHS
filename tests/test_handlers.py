@@ -14,9 +14,6 @@ class URLExtractionTests(unittest.TestCase):
         self.assertEqual(URL_RE.findall("127.0.0.1"), ["127.0.0.1"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class ScanRateLimitTests(unittest.TestCase):
     def setUp(self):
@@ -49,3 +46,7 @@ class ScanRateLimitTests(unittest.TestCase):
             handlers.MAX_RATE_BUCKETS = old_limit
 
 
+
+
+if __name__ == "__main__":
+    unittest.main()
