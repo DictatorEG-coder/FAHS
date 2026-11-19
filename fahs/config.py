@@ -17,6 +17,7 @@ class Settings:
     developer_url: str = os.getenv("DEVELOPER_URL", "")
     support_url: str = os.getenv("SUPPORT_URL", "")
     openphish_feed_url: str = os.getenv("OPENPHISH_FEED_URL", "")
+    urlhaus_auth_key: str = os.getenv("URLHAUS_AUTH_KEY", "").strip()
 
 settings = Settings()
 
