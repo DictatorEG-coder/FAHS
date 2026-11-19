@@ -2,9 +2,12 @@
 import ipaddress
 import re
 import socket
+import time
 from urllib.parse import urlsplit, urlunsplit, parse_qsl
 import httpx
 from fahs.config import settings
+
+_FEED_CACHE = {"expires": 0.0, "entries": set()}
 
 SUSPICIOUS_WORDS = {
     "login", "verify", "verification", "secure", "account", "update", "wallet",
@@ -92,6 +95,33 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
             current = _normalise(str(response_url.join(location)))
         return chain, "تجاوز الرابط الحد الأقصى للتحويلات"
 
+async def _openphish_entries() -> set[str]:
+    feed_url = settings.openphish_feed_url
+    if not feed_url.startswith("https://"):
+        return set()
+    now = time.monotonic()
+    if now < _FEED_CACHE["expires"]:
+        return _FEED_CACHE["entries"]
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
+            response = await client.get(feed_url)
+            response.raise_for_status()
+            entries = set()
+            for line in response.text.splitlines():
+                candidate = line.strip()
+                if candidate.startswith("https://") or candidate.startswith("http://"):
+                    try:
+                        normal = _normalise(candidate)
+                        entries.add(normal)
+                        entries.add(urlsplit(normal).hostname or "")
+                    except ValueError:
+                        continue
+            _FEED_CACHE["entries"] = entries
+            _FEED_CACHE["expires"] = now + 900
+            return entries
+    except httpx.HTTPError:
+        return set()
+
 async def scan_url(raw: str) -> dict:
     try:
         url = _normalise(raw)
@@ -104,6 +134,11 @@ async def scan_url(raw: str) -> dict:
     reasons = []
     score = 0
     labels = [x for x in re.split(r"[./_-]", host) if x]
+    feed_entries = await _openphish_entries()
+    if url in feed_entries or host in feed_entries:
+        return {"level": "خطر حرج", "score": 10,
+                "reasons": ["تطابق الرابط أو النطاق مع مؤشر وارد في مصدر OpenPhish المفعّل."],
+                "url": url, "host": host, "ips": addresses, "chain": [], "source": "OpenPhish"}
     if host in SHORTENERS:
         score += 1
         reasons.append("الرابط يستخدم خدمة اختصار؛ الوجهة النهائية تحتاج تحققًا")
@@ -122,7 +157,10 @@ async def scan_url(raw: str) -> dict:
     if len(labels) > 5:
         score += 1
         reasons.append("عدد مستويات النطاق الفرعية مرتفع")
-    chain, redirect_note = await _redirect_chain(url)
+    try:
+        chain, redirect_note = await _redirect_chain(url)
+    except (ValueError, UnicodeError) as exc:
+        chain, redirect_note = [url], str(exc)
     if redirect_note:
         reasons.append(redirect_note)
     if len(chain) > 1:
