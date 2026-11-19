@@ -28,6 +28,7 @@ def settings_menu(reminders: bool, interval: int = 1):
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=label, callback_data="reminders_toggle")],
         [InlineKeyboardButton(text=f"التكرار: {'يوميًا' if interval == 1 else 'كل يومين'}", callback_data="reminder_interval_toggle")],
+        [InlineKeyboardButton(text="🗑️ حذف بياناتي", callback_data="delete_data_prompt")],
         [InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")]
     ])
 
