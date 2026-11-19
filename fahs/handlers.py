@@ -192,11 +192,3 @@ async def privacy(call: CallbackQuery):
         reply_markup=back_menu())
     await call.answer()
 
-@router.message(Command("admin"))
-async def admin_stats(message: Message):
-    if message.from_user.id not in settings.admin_ids:
-        return
-    users, reminders, groups = db.stats()
-    await message.answer(
-        f"<b>لوحة فَحْص</b>\nالمستخدمون المسجلون: {users}\n"
-        f"المشتركون في التذكير: {reminders}\nالمجموعات المفعّل بها الفحص: {groups}")
