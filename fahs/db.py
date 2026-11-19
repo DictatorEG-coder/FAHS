@@ -97,3 +97,7 @@ def stats():
         reminders = db.execute("SELECT COUNT(*) FROM users WHERE reminders=1").fetchone()[0]
         groups = db.execute("SELECT COUNT(*) FROM group_settings WHERE enabled=1").fetchone()[0]
         return users, reminders, groups
+
+def delete_user(user_id: int):
+    with connect() as db:
+        db.execute("DELETE FROM users WHERE user_id=?", (user_id,))
