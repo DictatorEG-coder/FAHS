@@ -12,7 +12,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from fahs import db
 from fahs.content import TIPS, SCAMS, AI_SCAMS, DATA_RISKS, EMERGENCY, QUIZ, GLOSSARY
 from fahs.keyboards import main_menu, back_menu, settings_menu, emergency_menu
-from fahs.scanner import scan_url
+from fahs.scanner import scan_url, _normalise
 from fahs.config import settings
 
 router = Router()
@@ -188,6 +188,32 @@ async def group_off(message: Message):
     db.set_group(message.chat.id, False, False)
     await message.reply("تم إيقاف فحص روابط المجموعة.")
 
+def _extract_message_urls(message: Message) -> list[str]:
+    """Extract up to three unique visible or embedded text links without fetching them."""
+    source_text = message.text or message.caption or ""
+    entities = (message.entities or []) + (message.caption_entities or [])
+    matches = URL_RE.findall(source_text)
+    matches.extend(entity.url for entity in entities if entity.type == "text_link" and entity.url)
+
+    unique = []
+    seen = set()
+    for match in matches:
+        raw = match.rstrip(".,،؛!؟)]}")
+        if not raw:
+            continue
+        try:
+            key = _normalise(raw)
+        except (ValueError, UnicodeError):
+            key = raw.strip().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(raw)
+        if len(unique) == 3:
+            break
+    return unique
+
+
 async def send_scan(message: Message, raw: str) -> bool:
     actor = message.from_user.id if message.from_user else message.chat.id
     if not _allow_scan(actor):
@@ -277,18 +303,13 @@ async def admin_stats(message: Message):
 
 @router.message(F.text | F.caption)
 async def text_router(message: Message):
+    if message.from_user and message.from_user.is_bot:
+        return
     if message.chat.type in {"group", "supergroup"}:
         enabled, _ = db.get_group(message.chat.id)
         if not enabled:
             return
-    source_text = message.text or message.caption or ""
-    matches = URL_RE.findall(source_text)
-    entities = (message.entities or []) + (message.caption_entities or [])
-    matches.extend(entity.url for entity in entities if entity.type == "text_link" and entity.url)
-    if not matches:
-        return
-    for match in matches[:3]:
-        raw = match.rstrip(".,،؛!؟)]}")
+    for raw in _extract_message_urls(message):
         if message.chat.type in {"group", "supergroup"}:
             try:
                 host = urlsplit(raw if "://" in raw else "https://" + raw).hostname or ""
