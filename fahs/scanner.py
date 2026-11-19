@@ -312,6 +312,16 @@ async def _scan_url(raw: str) -> dict:
     except (ValueError, UnicodeError) as exc:
         return {"level": "تعذر إكمال الفحص", "score": 0, "reasons": [str(exc)], "url": "", "host": "", "chain": []}
 
+    # Never perform DNS lookups or contact the destination when the URL appears
+    # to carry credentials, session identifiers, or one-time codes.
+    if _has_sensitive_query(url):
+        return {
+            "level": "تعذر إكمال الفحص", "score": 0,
+            "reasons": ["يحتوي الرابط على معامل قد يكون سرًا أو رمز وصول؛ أُوقف الفحص قبل استعلام DNS أو الاتصال بالوجهة."],
+            "url": url, "host": host, "ips": [], "chain": [],
+            "sources_checked": [], "sources_unavailable": [],
+        }
+
     feed_entries = await _openphish_entries()
     urlhaus_entries = await _urlhaus_entries()
     sources_checked = [
@@ -414,4 +424,15 @@ async def _scan_url(raw: str) -> dict:
 
 async def scan_url(raw: str) -> dict:
     async with _SCAN_SEMAPHORE:
-        return await _scan_url(raw)
+        try:
+            return await _scan_url(raw)
+        except Exception:
+            # A third-party DNS or socket failure must not crash the Telegram update handler.
+            import logging
+            logging.getLogger(__name__).exception("Unexpected URL scan failure")
+            return {
+                "level": "تعذر إكمال الفحص", "score": 0,
+                "reasons": ["حدث خطأ تقني أثناء الفحص؛ لم نتمكن من إصدار نتيجة موثوقة. حاول لاحقًا."],
+                "url": "", "host": "", "ips": [], "chain": [],
+                "sources_checked": [], "sources_unavailable": [],
+            }
