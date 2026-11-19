@@ -1,18 +1,15 @@
 """Conservative URL inspection. This is indicator-based, never a safety guarantee."""
 import ipaddress
-import json
 import asyncio
 import re
 import socket
-import ssl
 import time
 from difflib import SequenceMatcher
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, quote
+from urllib.parse import urlsplit, urlunsplit, parse_qsl
 import httpx
 from fahs.config import settings
 
-_FEED_CACHE = {"expires": 0.0, "entries": set(), "status": "disabled"}
-_URLHAUS_CACHE = {"expires": 0.0, "entries": {}, "status": "disabled"}
+_FEED_CACHE = {"expires": 0.0, "entries": set()}
 _SCAN_SEMAPHORE = asyncio.Semaphore(8)
 
 SUSPICIOUS_WORDS = {
@@ -27,7 +24,7 @@ BRANDS = {
     "amazon": "amazon.com", "instagram": "instagram.com", "whatsapp": "whatsapp.com",
     "tiktok": "tiktok.com", "netflix": "netflix.com", "binance": "binance.com"
 }
-SENSITIVE_KEY_RE = re.compile(r"(^|[_-])(token|auth|key|session|code|password|otp|secret|sid|ticket|jwt|bearer|credential|cookie|signature|samlresponse)([_-]|$)", re.I)
+SENSITIVE_KEY_RE = re.compile(r"(^|[_-])(token|auth|key|session|code|password|otp|secret|sid|ticket)([_-]|$)", re.I)
 
 def _is_public_ip(value: str) -> bool:
     ip = ipaddress.ip_address(value)
@@ -57,8 +54,6 @@ def _resolve_public(host: str) -> list[str]:
 
 def _normalise(raw: str) -> str:
     raw = raw.strip()
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in raw):
-        raise ValueError("يحتوي الرابط على محارف تحكم غير مسموحة")
     if len(raw) > settings.max_url_length:
         raise ValueError("الرابط أطول من الحد المسموح")
     if "://" in raw and not re.match(r"^https?://", raw, re.I):
@@ -76,17 +71,9 @@ def _normalise(raw: str) -> str:
         port = parts.port
     except ValueError:
         raise ValueError("رقم المنفذ غير صالح")
-    if port is not None and port not in {80, 443}:
+    if port and port not in {80, 443, 8080, 8443}:
         raise ValueError("منفذ غير معتاد؛ أُوقف الفحص الوقائي")
-    if port is not None and ((parts.scheme.lower() == "https" and port != 443) or (parts.scheme.lower() == "http" and port != 80)):
-        raise ValueError("المنفذ لا يتوافق مع بروتوكول الرابط")
     host = parts.hostname.encode("idna").decode("ascii").lower().rstrip(".")
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        labels = host.split(".")
-        if len(host) > 253 or any(not re.fullmatch(r"(?!-)[a-z0-9-]{1,63}(?<!-)", label) for label in labels):
-            raise ValueError("اسم النطاق يحتوي على صياغة غير صالحة")
     authority = f"[{host}]" if ":" in host else host
     authority += f":{port}" if port else ""
     return urlunsplit((parts.scheme.lower(), authority, parts.path or "/", parts.query, ""))
@@ -100,207 +87,80 @@ def _brand_lookalike(host: str) -> str | None:
         if official_domain + "." in host:
             return brand
         similarity = SequenceMatcher(None, compact, brand).ratio()
-        if compact == brand or similarity >= 0.80:
+        if compact != brand and similarity >= 0.80:
             return brand
     return None
 
 def _has_sensitive_query(url: str) -> bool:
-    for key, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True):
-        compact = re.sub(r"[^a-z0-9]", "", key.lower())
-        if SENSITIVE_KEY_RE.search(key):
-            return True
-        if compact in {"code", "verificationcode", "accesscode", "pin", "samlresponse"}:
-            return True
-        if compact.endswith(("token", "key", "secret", "password", "otp", "sid", "ticket", "jwt", "bearer", "credential", "cookie", "signature")):
-            return True
-        if compact.startswith(("auth", "session", "credential", "authorization")):
-            return True
-    return False
+    return any(SENSITIVE_KEY_RE.search(k) for k, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True))
 
 async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
-    """Follow only HEAD redirects, connecting to the exact IP that passed validation."""
-    from urllib.parse import urljoin
-
     chain, current = [], start
-    for _ in range(settings.max_redirects + 1):
-        parts = urlsplit(current)
-        host = parts.hostname or ""
-        try:
-            addresses = await asyncio.to_thread(_resolve_public, host)
-        except ValueError as exc:
-            return chain, str(exc)
-        chain.append(current)
-        if _has_sensitive_query(current):
-            return chain, "توقفنا لأن الرابط يحتوي على معاملات قد تكون رموز وصول أو بيانات حساسة"
-
-        port = parts.port or (443 if parts.scheme == "https" else 80)
-        target_ip = addresses[0]
-        tls = ssl.create_default_context() if parts.scheme == "https" else None
-        path = quote(parts.path or "/", safe="/%:@!()*+,;=-._~")
-        if parts.query:
-            path += "?" + quote(parts.query, safe="=&?/%:@!()*+,;~-._")
-        authority = parts.netloc
-        request = (
-            f"HEAD {path} HTTP/1.1\r\n"
-            f"Host: {authority}\r\n"
-            "User-Agent: FAHS-Security-Link-Inspector/0.1\r\n"
-            "Connection: close\r\n\r\n"
-        )
-        writer = None
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(
-                    host=target_ip,
-                    port=port,
-                    ssl=tls,
-                    server_hostname=host if tls else None,
-                ),
-                timeout=settings.request_timeout,
-            )
-            writer.write(request.encode("ascii"))
-            await asyncio.wait_for(writer.drain(), timeout=settings.request_timeout)
-            status_line = await asyncio.wait_for(reader.readline(), timeout=settings.request_timeout)
-            if len(status_line) > 4096 or not status_line.startswith(b"HTTP/"):
-                return chain, "استجابة HTTP غير مفهومة من الموقع"
+    headers = {"User-Agent": "FAHS-Security-Link-Inspector/0.1"}
+    async with httpx.AsyncClient(timeout=settings.request_timeout, follow_redirects=False, trust_env=False, headers=headers) as client:
+        for _ in range(settings.max_redirects + 1):
+            parts = urlsplit(current)
             try:
-                status_code = int(status_line.split(b" ", 2)[1])
-            except (IndexError, ValueError):
-                return chain, "تعذر قراءة رمز استجابة HTTP"
-
-            location = None
-            total_header_bytes = len(status_line)
-            while True:
-                line = await asyncio.wait_for(reader.readline(), timeout=settings.request_timeout)
-                total_header_bytes += len(line)
-                if total_header_bytes > 16384:
-                    return chain, "ترويسات استجابة الموقع أكبر من الحد المسموح"
-                if line in (b"\r\n", b"\n", b""):
-                    break
-                if b":" not in line:
-                    continue
-                name, value = line.split(b":", 1)
-                if name.strip().lower() == b"location":
-                    location = value.decode("latin-1").strip()
-        except (OSError, asyncio.TimeoutError, ssl.SSLError, UnicodeError):
-            return chain, "تعذر تأكيد سلسلة التحويلات؛ قد يمنع الموقع طلبات الفحص"
-        finally:
-            if writer is not None:
-                writer.close()
-                try:
-                    await writer.wait_closed()
-                except OSError:
-                    pass
-
-        if status_code in {405, 501}:
-            return chain, "الموقع لا يدعم طلب HEAD؛ تعذر تأكيد سلسلة التحويلات دون تنزيل محتوى الصفحة"
-        if status_code not in {301, 302, 303, 307, 308}:
-            return chain, None
-        if not location:
-            return chain, "استجابة تحويل بلا وجهة واضحة"
-        try:
-            current = _normalise(urljoin(current, location))
-        except (ValueError, UnicodeError) as exc:
-            return chain, f"وجهة التحويل غير صالحة: {exc}"
-    return chain, "تجاوز الرابط الحد الأقصى للتحويلات"
+                await asyncio.to_thread(_resolve_public, parts.hostname or "")
+            except ValueError as exc:
+                return chain, str(exc)
+            chain.append(current)
+            if _has_sensitive_query(current):
+                return chain, "توقفنا لأن الرابط يحتوي على معاملات قد تكون رموز وصول أو بيانات حساسة"
+            try:
+                async with client.stream("HEAD", current) as response:
+                    status_code = response.status_code
+                    location = response.headers.get("location")
+                    response_url = response.url
+            except httpx.HTTPError:
+                return chain, "تعذر تأكيد سلسلة التحويلات؛ قد يمنع الموقع طلبات الفحص"
+            if status_code in {405, 501}:
+                return chain, "الموقع لا يدعم طلب HEAD؛ تعذر تأكيد سلسلة التحويلات دون طلب محتوى الصفحة"
+            if status_code not in {301, 302, 303, 307, 308}:
+                return chain, None
+            if not location:
+                return chain, "استجابة تحويل بلا وجهة واضحة"
+            current = _normalise(str(response_url.join(location)))
+        return chain, "تجاوز الرابط الحد الأقصى للتحويلات"
 
 async def _openphish_entries() -> set[str]:
     feed_url = settings.openphish_feed_url
-    if not feed_url:
-        _FEED_CACHE["status"] = "disabled"
+    if not feed_url.startswith("https://"):
         return set()
-    try:
-        feed_parts = urlsplit(feed_url)
-        if (feed_parts.scheme != "https" or feed_parts.hostname != "openphish.com"
-                or feed_parts.port not in (None, 443) or feed_parts.username or feed_parts.password):
-            _FEED_CACHE["status"] = "disabled"
-            return set()
-    except ValueError:
-        _FEED_CACHE["status"] = "disabled"
-        return set()
-
     now = time.monotonic()
     if now < _FEED_CACHE["expires"]:
         return _FEED_CACHE["entries"]
     try:
+        chunks = []
+        total = 0
         async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
             async with client.stream("GET", feed_url) as response:
                 response.raise_for_status()
-                chunks = []
-                total = 0
+                declared = response.headers.get("content-length")
+                if declared and int(declared) > 5_000_000:
+                    raise ValueError("OpenPhish feed exceeds the 5 MB safety limit")
                 async for chunk in response.aiter_bytes():
                     total += len(chunk)
-                    if total > 5 * 1024 * 1024:
-                        raise ValueError("OpenPhish feed exceeds the 5 MiB limit")
+                    if total > 5_000_000:
+                        raise ValueError("OpenPhish feed exceeds the 5 MB safety limit")
                     chunks.append(chunk)
-                body = b"".join(chunks).decode("utf-8", errors="replace")
-            entries = set()
-            for line in body.splitlines():
-                candidate = line.strip()
-                if candidate.startswith(("https://", "http://")):
-                    try:
-                        entries.add(_normalise(candidate))
-                    except (ValueError, UnicodeError):
-                        continue
-            _FEED_CACHE["entries"] = entries
-            _FEED_CACHE["status"] = "available"
-            _FEED_CACHE["expires"] = now + 900
-            return entries
+        body = b"".join(chunks).decode("utf-8", errors="replace")
+        entries = set()
+        for line in body.splitlines():
+            candidate = line.strip()
+            if candidate.startswith("https://") or candidate.startswith("http://"):
+                try:
+                    normal = _normalise(candidate)
+                    entries.add(normal)
+                except ValueError:
+                    continue
+        _FEED_CACHE["entries"] = entries
+        _FEED_CACHE["expires"] = now + 900
+        return entries
     except (httpx.HTTPError, ValueError, UnicodeError):
         _FEED_CACHE["entries"] = set()
-        _FEED_CACHE["status"] = "unavailable"
         _FEED_CACHE["expires"] = now + 300
         return set()
-
-
-def _parse_urlhaus_entries(payload: dict) -> dict[str, str]:
-    entries = {}
-    if payload.get("query_status") != "ok":
-        return entries
-    for item in payload.get("urls", []):
-        if not isinstance(item, dict) or item.get("threat") != "malware_download":
-            continue
-        candidate = item.get("url")
-        if not isinstance(candidate, str):
-            continue
-        try:
-            entries[_normalise(candidate)] = str(item.get("url_status", "unknown")).lower()
-        except (ValueError, UnicodeError):
-            continue
-    return entries
-
-async def _urlhaus_entries() -> dict[str, str]:
-    auth_key = settings.urlhaus_auth_key
-    if not auth_key:
-        _URLHAUS_CACHE["status"] = "disabled"
-        return {}
-    now = time.monotonic()
-    if now < _URLHAUS_CACHE["expires"]:
-        return _URLHAUS_CACHE["entries"]
-    endpoint = "https://urlhaus-api.abuse.ch/v1/urls/recent/limit/1000/"
-    try:
-        async with httpx.AsyncClient(timeout=12, follow_redirects=False, trust_env=False) as client:
-            async with client.stream(
-                "GET", endpoint,
-                headers={"Auth-Key": auth_key, "User-Agent": "FAHS-Security-Link-Inspector/0.1"},
-            ) as response:
-                response.raise_for_status()
-                chunks, total = [], 0
-                async for chunk in response.aiter_bytes():
-                    total += len(chunk)
-                    if total > 5 * 1024 * 1024:
-                        raise ValueError("URLhaus response exceeds the 5 MiB limit")
-                    chunks.append(chunk)
-            payload = json.loads(b"".join(chunks).decode("utf-8"))
-        entries = _parse_urlhaus_entries(payload)
-        _URLHAUS_CACHE["entries"] = entries
-        _URLHAUS_CACHE["status"] = "available"
-        _URLHAUS_CACHE["expires"] = now + 900
-        return entries
-    except (httpx.HTTPError, ValueError, UnicodeError, TypeError, json.JSONDecodeError):
-        _URLHAUS_CACHE["entries"] = {}
-        _URLHAUS_CACHE["status"] = "unavailable"
-        _URLHAUS_CACHE["expires"] = now + 300
-        return {}
 
 async def _scan_url(raw: str) -> dict:
     try:
@@ -311,27 +171,10 @@ async def _scan_url(raw: str) -> dict:
         return {"level": "تعذر إكمال الفحص", "score": 0, "reasons": [str(exc)], "url": "", "host": "", "chain": []}
 
     feed_entries = await _openphish_entries()
-    urlhaus_entries = await _urlhaus_entries()
-    sources_checked = [
-        name for name, cache in (("OpenPhish", _FEED_CACHE), ("URLhaus", _URLHAUS_CACHE))
-        if cache["status"] == "available"
-    ]
-    sources_unavailable = [
-        name for name, cache in (("OpenPhish", _FEED_CACHE), ("URLhaus", _URLHAUS_CACHE))
-        if cache["status"] == "unavailable"
-    ]
     if url in feed_entries:
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابق الرابط حرفيًا مع مؤشر وارد في مصدر OpenPhish المفعّل."],
-                "url": url, "host": host, "ips": [], "chain": [], "source": "OpenPhish",
-                "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
-    if url in urlhaus_entries:
-        status = urlhaus_entries[url]
-        severity = "خطر حرج" if status == "online" else "مرتفع"
-        return {"level": severity, "score": 10 if status == "online" else 7,
-                "reasons": [f"الرابط مطابق لسجل URLhaus الخاص بتوزيع برمجيات خبيثة؛ الحالة المسجلة: {status}."],
-                "url": url, "host": host, "ips": [], "chain": [], "source": "URLhaus",
-                "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
+                "url": url, "host": host, "ips": [], "chain": [], "source": "OpenPhish"}
     try:
         addresses = await asyncio.to_thread(_resolve_public, host)
     except (ValueError, UnicodeError) as exc:
@@ -379,15 +222,7 @@ async def _scan_url(raw: str) -> dict:
     if any(step in feed_entries for step in chain):
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابقت إحدى وجهات التحويل مع مؤشر وارد في مصدر OpenPhish المفعّل."],
-                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "OpenPhish",
-                "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
-    matched_urlhaus = next((urlhaus_entries[step] for step in chain if step in urlhaus_entries), None)
-    if matched_urlhaus is not None:
-        severity = "خطر حرج" if matched_urlhaus == "online" else "مرتفع"
-        return {"level": severity, "score": 10 if matched_urlhaus == "online" else 7,
-                "reasons": [f"تطابقت إحدى وجهات التحويل مع سجل URLhaus؛ الحالة المسجلة: {matched_urlhaus}."],
-                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "URLhaus",
-                "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
+                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "OpenPhish"}
     if len(chain) > 1:
         score += 1
         reasons.append(f"رُصدت {len(chain)-1} عملية تحويل")
@@ -406,8 +241,7 @@ async def _scan_url(raw: str) -> dict:
         level = "لم تظهر مؤشرات اشتباه أولية"
 
     return {"level": level, "score": score, "reasons": reasons or ["لم تظهر مؤشرات تركيبية واضحة."],
-            "url": url, "host": host, "ips": addresses, "chain": chain,
-            "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
+            "url": url, "host": host, "ips": addresses, "chain": chain}
 
 
 async def scan_url(raw: str) -> dict:
