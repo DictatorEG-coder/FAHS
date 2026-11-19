@@ -54,6 +54,13 @@ class ScannerUnitTests(unittest.TestCase):
     def test_detects_cookie_query_parameter(self):
         self.assertTrue(_has_sensitive_query("https://example.com/?sessionCookie=secret"))
 
+    def test_removes_default_https_port(self):
+        self.assertEqual(_normalise("https://example.com:443/path#section"),
+                         "https://example.com/path")
+
+    def test_removes_default_http_port(self):
+        self.assertEqual(_normalise("http://example.com:80/"), "http://example.com/")
+
     def test_normalises_ipv6_authority(self):
         self.assertEqual(_normalise("https://[2606:4700:4700::1111]"),
                          "https://[2606:4700:4700::1111]/")
