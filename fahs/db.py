@@ -13,6 +13,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             reminders INTEGER NOT NULL DEFAULT 0,
+            last_reminder_date TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS group_settings (
@@ -21,6 +22,9 @@ def init_db():
             auto_delete INTEGER NOT NULL DEFAULT 0
         );
         """)
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
+        if "last_reminder_date" not in columns:
+            db.execute("ALTER TABLE users ADD COLUMN last_reminder_date TEXT")
 
 def touch_user(user_id: int):
     with connect() as db:
@@ -29,12 +33,26 @@ def touch_user(user_id: int):
 def set_reminders(user_id: int, enabled: bool):
     touch_user(user_id)
     with connect() as db:
-        db.execute("UPDATE users SET reminders=? WHERE user_id=?", (int(enabled), user_id))
+        db.execute("UPDATE users SET reminders=?, last_reminder_date=NULL WHERE user_id=?", (int(enabled), user_id))
 
 def get_reminders(user_id: int) -> bool:
     with connect() as db:
         row = db.execute("SELECT reminders FROM users WHERE user_id=?", (user_id,)).fetchone()
         return bool(row["reminders"]) if row else False
+
+def reminder_users():
+    with connect() as db:
+        rows = db.execute("SELECT user_id FROM users WHERE reminders=1").fetchall()
+        return [int(row["user_id"]) for row in rows]
+
+def mark_reminder_sent(user_id: int, day: str):
+    with connect() as db:
+        db.execute("UPDATE users SET last_reminder_date=? WHERE user_id=?", (day, user_id))
+
+def reminder_sent_today(user_id: int, day: str) -> bool:
+    with connect() as db:
+        row = db.execute("SELECT last_reminder_date FROM users WHERE user_id=?", (user_id,)).fetchone()
+        return bool(row and row["last_reminder_date"] == day)
 
 def set_group(chat_id: int, enabled: bool, auto_delete: bool = False):
     with connect() as db:
