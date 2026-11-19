@@ -13,11 +13,13 @@ MESSAGES = [
 ]
 
 async def reminder_loop(bot: Bot):
-    # Opt-in only; each user chooses daily or every-other-day delivery.
+    # Opt-in only. Process each Cairo calendar day once; the database prevents duplicates after restarts.
+    processed_day = None
     while True:
         now = datetime.now(ZoneInfo("Africa/Cairo"))
         day = now.date().isoformat()
-        if now.hour == 10 and now.minute < 5:
+        if now.hour >= 10 and processed_day != day:
+            processed_day = day
             for user_id in db.reminder_users():
                 if not db.get_reminders(user_id) or not db.reminder_due(user_id, day):
                     continue
@@ -30,5 +32,4 @@ async def reminder_loop(bot: Bot):
                     logging.exception("Failed to deliver an opted-in reminder")
                     db.mark_reminder_sent(user_id, day)
                 await asyncio.sleep(0.1)
-            await asyncio.sleep(300)
         await asyncio.sleep(30)
