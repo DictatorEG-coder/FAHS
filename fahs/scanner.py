@@ -84,6 +84,8 @@ def _brand_lookalike(host: str) -> str | None:
     for brand, official_domain in BRANDS.items():
         if host == official_domain or host.endswith("." + official_domain):
             continue
+        if official_domain + "." in host:
+            return brand
         similarity = SequenceMatcher(None, compact, brand).ratio()
         if compact != brand and similarity >= 0.80:
             return brand
