@@ -12,13 +12,13 @@
 - ⏳ فحص الصور والملفات: غير مفعّل حالياً (الروابط فقط) حسب الطلب.
 
 ## خطوات التشغيل
-1. **@BotFather** ← `/newbot` ← احفظ التوكن. (صورة البوت: `assets/fahs-logo.svg` عبر `/setuserpic`)
+1. **@BotFather** ← `/newbot` ← احفظ التوكن. شعار المشروع موجود في `assets/fahs-logo.svg`.
 2. اعرف رقمك (ID) من **@userinfobot**.
 3. (اختياري لكن مهم) مفتاح **VirusTotal** المجاني من virustotal.com ← الملف الشخصي ← API Key.
 4. ارفع محتوى هذا المجلد إلى مستودع **GitHub** (يفضل Private).
 5. في Cloudflare: **Storage & Databases ← D1 ← Create** باسم `fahs-db`، وانسخ **Database ID**.
 6. استبدل قيمة `REPLACE_WITH_D1_DATABASE_ID` في `wrangler.jsonc` بمعرّف D1 الذي نسخته، ثم احفظ التعديل.
-7. **Workers & Pages ← Create ← Import a repository** واختر المستودع. أمر النشر: `npx wrangler deploy`.
+7. **Workers & Pages ← Create ← Import a repository** واختر المستودع واضبط Root directory على `workers`. أمر النشر: `npx wrangler deploy`.
 8. من الـ Worker ← **Settings ← Variables and Secrets** أضف كـ **Secret**:
    `BOT_TOKEN` ، `OWNER_ID` ، `WEBHOOK_SECRET` (نص عشوائي طويل من حروف وأرقام فقط). لا تضف `VT_API_KEY` إلا إذا كنت ستستخدم VirusTotal، ولا تفعّل `VT_EXTERNAL_SCAN_CONSENT=1` إلا بعد موافقتك الصريحة على إرسال الروابط إلى خدمة خارجية.
 9. أرسل طلب POST إلى `https://اسم-الworker.workers.dev/setup` مع ترويسة `x-fahs-setup-secret: قيمة_WEBHOOK_SECRET`. لا تضع السر في عنوان URL.
@@ -39,7 +39,7 @@
 ## التطوير والاختبار
 ```bash
 npm test          # اختبارات شاملة بقاعدة بيانات محاكاة (لا تحتاج إنترنت)
-npm install && npx wrangler dev
+cd workers && npm install && npx wrangler dev
 ```
 ## خطط مستقبلية مقترحة
 فحص الملفات عبر VirusTotal (بالهاش)، Google Safe Browsing، لغة إنجليزية، استيراد/تصدير المحتوى.
@@ -47,3 +47,7 @@ npm install && npx wrangler dev
 
 ## حماية المجموعات
 أضف البوت إلى المجموعة وعطّل Privacy Mode من BotFather إذا أردت قراءة روابط الرسائل العادية. يفعّل مشرف المجموعة الحماية عبر `/fahs_on` ويوقفها عبر `/fahs_off` ويستعرض حالتها عبر `/fahs_status`. الحماية متوقفة افتراضياً لكل مجموعة. لا يحذف البوت رسائل الأعضاء تلقائياً.
+
+
+## حالة التنفيذ
+هذا الفرع تطويري مستقل. لا توجد أسرار أو قاعدة D1 مرتبطة به بعد، ولم يُنشر Worker إلى Cloudflare. لا تضع مفاتيحك في GitHub؛ أضفها في Cloudflare Secrets فقط.
