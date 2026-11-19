@@ -39,7 +39,7 @@ async def help_cmd(message: Message):
 
 @router.message(Command("fahs_on"))
 async def group_on(message: Message):
-    if message.chat.type not in {"group", "supergroup"}:
+    if message.chat.type not in {"group", "supergroup"} or not message.from_user:
         return
     member = await message.chat.get_member(message.from_user.id)
     if member.status not in {"administrator", "creator"}:
@@ -119,7 +119,7 @@ async def group_allowlist(message: Message):
 
 @router.message(Command("fahs_off"))
 async def group_off(message: Message):
-    if message.chat.type not in {"group", "supergroup"}:
+    if message.chat.type not in {"group", "supergroup"} or not message.from_user:
         return
     member = await message.chat.get_member(message.from_user.id)
     if member.status not in {"administrator", "creator"}:
