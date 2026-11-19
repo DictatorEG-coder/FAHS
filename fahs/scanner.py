@@ -133,6 +133,8 @@ async def _read_head_response(reader) -> tuple[int, str | None]:
             if len(status_parts) < 2:
                 raise ValueError
             status_code = int(status_parts[1])
+            if not 100 <= status_code <= 599:
+                raise ValueError
         except ValueError:
             raise ValueError("تعذر قراءة رمز استجابة HTTP")
 
@@ -199,7 +201,9 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
             writer.write(request.encode("ascii"))
             await asyncio.wait_for(writer.drain(), timeout=settings.request_timeout)
             status_code, location = await _read_head_response(reader)
-        except (OSError, asyncio.TimeoutError, ssl.SSLError, UnicodeError):
+        except (OSError, asyncio.TimeoutError, ssl.SSLError, UnicodeError, ValueError) as exc:
+            if isinstance(exc, ValueError):
+                return chain, str(exc)
             return chain, "تعذر تأكيد سلسلة التحويلات؛ قد يمنع الموقع طلبات الفحص"
         finally:
             if writer is not None:
