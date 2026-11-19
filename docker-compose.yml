@@ -3,9 +3,19 @@ services:
     build: .
     container_name: fahs-security
     restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
     env_file:
       - .env
     volumes:
       - fahs-data:/app/data
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
 volumes:
   fahs-data:
