@@ -1,4 +1,6 @@
 import re
+import time
+from collections import defaultdict, deque
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery
@@ -10,6 +12,8 @@ from fahs.config import settings
 
 router = Router()
 URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?)")
+SCAN_EVENTS = defaultdict(deque)
+
 TIP_TEXT = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ\n\nاللهم صلِّ وسلم على نبينا محمد."
 
 def welcome():
@@ -51,6 +55,15 @@ async def group_off(message: Message):
     await message.reply("تم إيقاف فحص روابط المجموعة.")
 
 async def send_scan(message: Message, raw: str):
+    actor = message.from_user.id if message.from_user else message.chat.id
+    now = time.monotonic()
+    events = SCAN_EVENTS[actor]
+    while events and now - events[0] > 60:
+        events.popleft()
+    if len(events) >= 8:
+        await message.reply("تم بلوغ حد الفحص المؤقت. انتظر دقيقة ثم حاول مجددًا.")
+        return
+    events.append(now)
     result = await scan_url(raw)
     reasons = "\n".join("• " + x for x in result["reasons"])
     host = result.get("host") or "غير متاح"
