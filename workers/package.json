@@ -1,0 +1,15 @@
+{
+  "name": "fahs-bot",
+  "version": "1.0.0",
+  "description": "فَحْص | FAHS - بوت تيليجرام للأمن الرقمي وفحص الروابط (Cloudflare Workers + D1)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --no-warnings test/run.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
