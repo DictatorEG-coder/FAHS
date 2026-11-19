@@ -12,6 +12,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS scans (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, verdict TEXT, host TEXT)`,
   `CREATE TABLE IF NOT EXISTS rl (key TEXT PRIMARY KEY, win INTEGER, n INTEGER)`,
   `CREATE TABLE IF NOT EXISTS broadcasts (id INTEGER PRIMARY KEY AUTOINCREMENT, from_chat INTEGER, message_id INTEGER, status TEXT, last_user INTEGER DEFAULT 0, sent INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, total INTEGER DEFAULT 0, created INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS group_settings (chat_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_blocks_sec ON blocks(section_id, position)`,
   `CREATE INDEX IF NOT EXISTS idx_sections_parent ON sections(parent_id, position)`,
 ];
@@ -21,7 +22,7 @@ export const DEFAULT_SETTINGS = {
     "🟢 <b>أهلاً بك في فَحْص | FAHS</b>\n\nبوت الأمن الرقمي: افحص أي رابط مشبوه قبل أن تفتحه، وتعلّم كيف تحمي نفسك وعائلتك من الاحتيال الإلكتروني.\n\n👇 اختر من القائمة:",
   maintenance: "0",
   scan_limit_per_hour: "20",
-  vt_enabled: "1",
+  vt_enabled: "0",
   maintenance_text: "🛠 البوت تحت الصيانة حالياً، حاول لاحقاً.",
 };
 
