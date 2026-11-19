@@ -376,7 +376,11 @@ async def admin_content_pick(call: CallbackQuery):
         return
     try:
         _, category, raw_index = call.data.split(":")
-        item = _catalog_items(category)[int(raw_index)]
+        index = int(raw_index)
+        items = _catalog_items(category)
+        if index < 0 or index >= len(items):
+            raise IndexError
+        item = items[index]
     except (ValueError, IndexError):
         await call.answer("العنصر غير متاح.", show_alert=True)
         return
@@ -407,7 +411,7 @@ async def admin_content_add(call: CallbackQuery):
     await call.message.answer(
         "أرسل المحتوى في رسالة واحدة بهذا التنسيق:\n"
         "<code>العنوان في السطر الأول\nثم اكتب الشرح كاملًا في الأسطر التالية</code>\n"
-        "الحد الأقصى للعنوان 90 حرفًا وللمحتوى 3500 حرف. أرسل /cancel للإلغاء.")
+        f"الحد الأقصى للعنوان 90 حرفًا وللمحتوى {body_limit} حرف. أرسل /cancel للإلغاء.")
     await call.answer()
 
 
@@ -418,7 +422,11 @@ async def admin_content_edit(call: CallbackQuery):
         return
     try:
         _, category, raw_index = call.data.split(":")
-        key, title, body = _catalog_items(category)[int(raw_index)]
+        index = int(raw_index)
+        items = _catalog_items(category)
+        if index < 0 or index >= len(items):
+            raise IndexError
+        key, title, body = items[index]
     except (ValueError, IndexError):
         await call.answer("العنصر غير متاح.", show_alert=True)
         return
@@ -436,7 +444,11 @@ async def admin_content_delete(call: CallbackQuery):
         return
     try:
         _, category, raw_index = call.data.split(":")
-        key, title, _ = _catalog_items(category)[int(raw_index)]
+        index = int(raw_index)
+        items = _catalog_items(category)
+        if index < 0 or index >= len(items):
+            raise IndexError
+        key, title, _ = items[index]
     except (ValueError, IndexError):
         await call.answer("العنصر غير متاح.", show_alert=True)
         return
@@ -627,6 +639,7 @@ CONTENT_CATEGORIES = {
     "protection": "أدلة الحماية",
     "emergency": "حالات الطوارئ",
     "glossary": "قاموس الأمن الرقمي",
+    "tips": "نصائح اليوم",
 }
 
 
@@ -638,6 +651,8 @@ def _catalog_items(category: str):
         base = {title: (title, body) for title, body in EMERGENCY.items()}
     elif category == "glossary":
         base = {term: (term, meaning) for term, meaning in GLOSSARY.items()}
+    elif category == "tips":
+        base = {f"tip:{i}": (f"نصيحة {i + 1}", body) for i, body in enumerate(TIPS)}
     else:
         base_map = {"scams": SCAMS, "ai_scams": AI_SCAMS, "data": DATA_RISKS}
         base = {key: (key, body) for key, body in base_map.get(category, {}).items()}
@@ -810,8 +825,13 @@ async def emergency_detail(call: CallbackQuery):
 
 @router.callback_query(F.data == "tip")
 async def tip(call: CallbackQuery):
-    index = datetime.now(ZoneInfo("Africa/Cairo")).timetuple().tm_yday % len(TIPS)
-    await call.message.edit_text("💡 <b>نصيحة اليوم</b>\n" + TIPS[index], reply_markup=back_menu())
+    items = _catalog_items("tips")
+    if not items:
+        await call.message.edit_text("لا توجد نصائح متاحة حاليًا.", reply_markup=back_menu())
+    else:
+        index = datetime.now(ZoneInfo("Africa/Cairo")).timetuple().tm_yday % len(items)
+        _, title, body = items[index]
+        await call.message.edit_text(f"💡 <b>نصيحة اليوم</b>\n<b>{escape(title)}</b>\n{escape(body)}", reply_markup=back_menu())
     await call.answer()
 
 @router.callback_query(F.data == "about")
