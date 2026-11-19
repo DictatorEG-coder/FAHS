@@ -8,9 +8,9 @@ from zoneinfo import ZoneInfo
 from collections import defaultdict, deque
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from fahs import db
-from fahs.content import TIPS, SCAMS, DATA_RISKS, EMERGENCY, QUIZ, GLOSSARY
+from fahs.content import TIPS, SCAMS, AI_SCAMS, DATA_RISKS, EMERGENCY, QUIZ, GLOSSARY
 from fahs.keyboards import main_menu, back_menu, settings_menu, emergency_menu
 from fahs.scanner import scan_url
 from fahs.config import settings
@@ -279,21 +279,79 @@ async def protect(call: CallbackQuery):
     await call.message.edit_text(text, reply_markup=back_menu())
     await call.answer()
 
-@router.callback_query(F.data.in_({"scams","ai_scams","data"}))
+@router.callback_query(F.data.in_({"scams", "ai_scams", "data"}))
 async def library(call: CallbackQuery):
     if call.data == "scams":
-        data = SCAMS
-        title = "موسوعة أساليب الاحتيال"
+        data, title = SCAMS, "موسوعة أساليب الاحتيال"
     elif call.data == "ai_scams":
-        data = {"استنساخ الصوت والفيديو": SCAMS["الاحتيال بالذكاء الاصطناعي"],
-                "التزييف العميق": "قد تُنشأ صور أو مقاطع تبدو حقيقية. لا تعتمد على المظهر وحده؛ اطلب تحققًا مستقلًا من الشخص أو الجهة.",
-                "الرسائل الآلية": "قد تنتج رسائل مقنعة ومخصصة. افحص الطلب والمرسل والرابط بدل الحكم على جودة اللغة."}
-        title = "الاحتيال المدعوم بالذكاء الاصطناعي"
+        data, title = AI_SCAMS, "الاحتيال المدعوم بالذكاء الاصطناعي"
     else:
-        data = DATA_RISKS
-        title = "مخاطر مشاركة البيانات"
-    body = "<b>" + title + "</b>\n\n" + "\n\n".join(f"<b>{k}</b>\n{v}" for k,v in data.items())
-    await call.message.edit_text(body, reply_markup=back_menu())
+        data, title = DATA_RISKS, "مخاطر مشاركة البيانات"
+
+    items = list(data.items())
+    rows = []
+    for index in range(0, len(items), 2):
+        row = [
+            InlineKeyboardButton(text=items[index][0], callback_data=f"lib:{call.data}:{index}")
+        ]
+        if index + 1 < len(items):
+            row.append(InlineKeyboardButton(
+                text=items[index + 1][0],
+                callback_data=f"lib:{call.data}:{index + 1}",
+            ))
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")])
+    await call.message.edit_text(
+        f"<b>{escape(title)}</b>\nاختر الموضوع الذي تريد قراءته:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("lib:"))
+async def library_detail(call: CallbackQuery):
+    try:
+        _, category, raw_index = call.data.split(":", 2)
+        index = int(raw_index)
+    except (ValueError, AttributeError):
+        await call.answer("تعذر فتح الموضوع.", show_alert=True)
+        return
+
+    catalogues = {
+        "scams": (SCAMS, "موسوعة أساليب الاحتيال"),
+        "ai_scams": (AI_SCAMS, "الاحتيال بالذكاء الاصطناعي"),
+        "data": (DATA_RISKS, "مخاطر مشاركة البيانات"),
+    }
+    selected = catalogues.get(category)
+    if not selected:
+        await call.answer("هذا القسم غير متاح.", show_alert=True)
+        return
+    data, title = selected
+    items = list(data.items())
+    if index < 0 or index >= len(items):
+        await call.answer("الموضوع غير موجود.", show_alert=True)
+        return
+
+    heading, explanation = items[index]
+    navigation = []
+    if index > 0:
+        navigation.append(InlineKeyboardButton(
+            text="⬅️ السابق", callback_data=f"lib:{category}:{index - 1}"
+        ))
+    if index + 1 < len(items):
+        navigation.append(InlineKeyboardButton(
+            text="التالي ➡️", callback_data=f"lib:{category}:{index + 1}"
+        ))
+    rows = [navigation] if navigation else []
+    rows.append([
+        InlineKeyboardButton(text="قائمة الموضوعات", callback_data=category),
+        InlineKeyboardButton(text="الرئيسية", callback_data="home"),
+    ])
+    await call.message.edit_text(
+        f"<b>{escape(heading)}</b>\n\n{escape(explanation)}\n\n"
+        f"<i>{index + 1} من {len(items)} — {escape(title)}</i>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
     await call.answer()
 
 @router.callback_query(F.data == "emergency")
