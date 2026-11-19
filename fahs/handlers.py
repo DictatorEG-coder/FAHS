@@ -9,7 +9,7 @@ from fahs.scanner import scan_url
 from fahs.config import settings
 
 router = Router()
-URL_RE = re.compile(r"(?i)(?:https?://|www\.)[^\s<>]+")
+URL_RE = re.compile(r"(?i)(?:(?:https?://|www\\.)[^\\s<>]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}(?::\\d+)?(?:/[^\\s<>]*)?)")
 TIP_TEXT = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ\n\nاللهم صلِّ وسلم على نبينا محمد."
 
 def welcome():
