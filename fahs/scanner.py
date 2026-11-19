@@ -124,7 +124,9 @@ async def _openphish_entries() -> set[str]:
             _FEED_CACHE["entries"] = entries
             _FEED_CACHE["expires"] = now + 900
             return entries
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
+        _FEED_CACHE["entries"] = set()
+        _FEED_CACHE["expires"] = now + 300
         return set()
 
 async def _scan_url(raw: str) -> dict:
