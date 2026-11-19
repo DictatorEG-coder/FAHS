@@ -1,5 +1,6 @@
 """Conservative URL inspection. This is indicator-based, never a safety guarantee."""
 import ipaddress
+import asyncio
 import re
 import socket
 import time
@@ -8,6 +9,7 @@ import httpx
 from fahs.config import settings
 
 _FEED_CACHE = {"expires": 0.0, "entries": set()}
+_SCAN_SEMAPHORE = asyncio.Semaphore(8)
 
 SUSPICIOUS_WORDS = {
     "login", "verify", "verification", "secure", "account", "update", "wallet",
@@ -123,7 +125,7 @@ async def _openphish_entries() -> set[str]:
     except httpx.HTTPError:
         return set()
 
-async def scan_url(raw: str) -> dict:
+async def _scan_url(raw: str) -> dict:
     try:
         url = _normalise(raw)
         parts = urlsplit(url)
@@ -185,3 +187,8 @@ async def scan_url(raw: str) -> dict:
 
     return {"level": level, "score": score, "reasons": reasons or ["لم تظهر مؤشرات تركيبية واضحة."],
             "url": url, "host": host, "ips": addresses, "chain": chain}
+
+
+async def scan_url(raw: str) -> dict:
+    async with _SCAN_SEMAPHORE:
+        return await _scan_url(raw)
