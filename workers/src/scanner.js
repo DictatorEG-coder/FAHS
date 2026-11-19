@@ -258,7 +258,8 @@ export async function scanUrl(env, raw, { useVt = false } = {}) {
   const finalUrl = red.final && red.chain.length > 1 ? red.final : null;
   const local = analyzeLocal(url, red.chain.length, finalUrl);
   const target = (finalUrl || url).href;
-  const sensitive = /(?:^|[?&])(?:token|access_token|auth|session|code|otp|password|secret|key|sid|ticket|jwt|signature)=/i.test(url.search);
+  const sensitiveKeys = [...url.searchParams.keys()].map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const sensitive = sensitiveKeys.some((key) => /^(?:token|accesstoken|auth|authorization|session|code|verificationcode|otp|password|secret|key|sid|ticket|jwt|signature|cookie|credential|pin)$/.test(key)) || /(?:token|auth|session|otp|password|secret|signature)/i.test(url.hash);
   const vt = useVt && !sensitive ? await vtLookup(env, target) : { skipped: sensitive ? "sensitive_url" : "disabled" };
   const verdict = verdictFrom(local.score, vt);
   const text = formatReport({ original: url, chain: red.chain, finalUrl, local, vt, vtEnabled: useVt && !!env.VT_API_KEY, verdict, notes });
