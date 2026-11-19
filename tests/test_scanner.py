@@ -16,6 +16,13 @@ class ScannerUnitTests(unittest.TestCase):
     def test_detects_sensitive_query_parameter(self):
         self.assertTrue(_has_sensitive_query("https://example.com/?access_token=secret"))
 
+    def test_detects_api_key_parameter(self):
+        self.assertTrue(_has_sensitive_query("https://example.com/?api_key=secret"))
+
+    def test_normalises_ipv6_authority(self):
+        self.assertEqual(_normalise("https://[2606:4700:4700::1111]"),
+                         "https://[2606:4700:4700::1111]/")
+
     def test_rejects_loopback_address(self):
         with self.assertRaises(ValueError):
             _resolve_public("127.0.0.1")
