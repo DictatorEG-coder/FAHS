@@ -4,7 +4,6 @@ import re
 import socket
 from urllib.parse import urlsplit, urlunsplit, parse_qsl
 import httpx
-import dns.resolver
 from fahs.config import settings
 
 SUSPICIOUS_WORDS = {
@@ -72,21 +71,25 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
     async with httpx.AsyncClient(timeout=settings.request_timeout, follow_redirects=False, trust_env=False, headers=headers) as client:
         for _ in range(settings.max_redirects + 1):
             parts = urlsplit(current)
-            _resolve_public(parts.hostname or "")
+            try:
+                _resolve_public(parts.hostname or "")
+            except ValueError as exc:
+                return chain, str(exc)
             chain.append(current)
             if _has_sensitive_query(current):
                 return chain, "توقفنا لأن الرابط يحتوي على معاملات قد تكون رموز وصول أو بيانات حساسة"
             try:
-                response = await client.get(current, headers={"Range": "bytes=0-0"})
+                async with client.stream("GET", current, headers={"Range": "bytes=0-0"}) as response:
+                    status_code = response.status_code
+                    location = response.headers.get("location")
+                    response_url = response.url
             except httpx.HTTPError:
-                # Some sites reject GET/HEAD probes; the remaining checks still apply.
                 return chain, "تعذر تأكيد سلسلة التحويلات؛ قد يمنع الموقع طلبات الفحص"
-            if response.status_code not in {301, 302, 303, 307, 308}:
+            if status_code not in {301, 302, 303, 307, 308}:
                 return chain, None
-            location = response.headers.get("location")
             if not location:
                 return chain, "استجابة تحويل بلا وجهة واضحة"
-            current = _normalise(str(response.url.join(location)))
+            current = _normalise(str(response_url.join(location)))
         return chain, "تجاوز الرابط الحد الأقصى للتحويلات"
 
 async def scan_url(raw: str) -> dict:
