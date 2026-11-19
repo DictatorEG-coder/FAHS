@@ -150,7 +150,7 @@ async def emergency(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith("em:"))
 async def emergency_detail(call: CallbackQuery):
-    keys = {"otp": "شاركت رمز تحقق", "password": "أدخلت كلمة المرور في صفحة مزيفة", "money": "حوّلت أموالًا", "app": "ثبّت تطبيقًا مشبوهًا", "extortion": "تعرضت للابتزاز"}
+    keys = {"otp": "شاركت رمز تحقق", "password": "أدخلت كلمة المرور في صفحة مزيفة", "money": "حوّلت أموالًا", "app": "ثبّت تطبيقًا مشبوهًا", "extortion": "تعرضت للابتزاز", "telegram": "فقدت حساب تيليجرام", "leak": "تسربت بياناتي"}
     key = keys.get(call.data[3:], "")
     body = EMERGENCY.get(key, "أوقف التفاعل، واحتفظ بالأدلة، وتواصل مع الجهة الرسمية المعنية.")
     await call.message.edit_text(f"<b>خطوات أولية</b>\n{body}\n\nلا تحذف الأدلة، وتواصل مع البنك أو المنصة أو الجهات الرسمية عبر قنواتها الموثقة.", reply_markup=back_menu())
