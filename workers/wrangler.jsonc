@@ -6,7 +6,7 @@
   "observability": { "enabled": true },
   // قاعدة البيانات: إن لم تظهر تلقائياً ضع database_id بعد إنشائها (انظر README)
   "d1_databases": [
-    { "binding": "DB", "database_name": "fahs-db" }
+    { "binding": "DB", "database_name": "fahs-db", "database_id": "REPLACE_WITH_D1_DATABASE_ID" }
   ],
   // مهمة كل دقيقة لإكمال الإذاعات الكبيرة على دفعات
   "triggers": { "crons": ["* * * * *"] },
