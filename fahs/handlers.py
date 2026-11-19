@@ -90,13 +90,16 @@ async def admin_stats(message: Message):
         f"<b>لوحة فَحْص</b>\nالمستخدمون المسجلون: {users}\n"
         f"المشتركون في التذكير: {reminders}\nالمجموعات المفعّل بها الفحص: {groups}")
 
-@router.message(F.text)
+@router.message(F.text | F.caption)
 async def text_router(message: Message):
     if message.chat.type in {"group", "supergroup"}:
         enabled, _ = db.get_group(message.chat.id)
         if not enabled:
             return
-    matches = URL_RE.findall(message.text or "")
+    source_text = message.text or message.caption or ""
+    matches = URL_RE.findall(source_text)
+    entities = (message.entities or []) + (message.caption_entities or [])
+    matches.extend(entity.url for entity in entities if entity.type == "text_link" and entity.url)
     if not matches:
         return
     for match in matches[:3]:
