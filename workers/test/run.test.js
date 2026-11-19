@@ -56,6 +56,7 @@ await t("normalizeUrl يرفض javascript: و file:", () => {
   assert.ok(normalizeUrl("javascript:alert(1)").error);
   assert.ok(normalizeUrl("file:///etc/passwd").error);
   assert.equal(normalizeUrl("example.com/a").url.hostname, "example.com");
+  assert.ok(normalizeUrl("https://user:pass@example.com").error);
 });
 await t("التحليل المحلي: انتحال وتمويه", () => {
   assert.ok(analyzeLocal(new URL("http://paypal.login-secure.xyz/verify")).score >= 70);
@@ -92,6 +93,14 @@ await t("فحص رابط مشبوه محلياً دون إرسال تلقائي 
   const e = last("editMessageText"); assert.ok(e.body.text.includes("خطير"), e.body.text);
   assert.equal(externalCalls.length, 0, "the scanner must not contact external services by default");
   assert.ok(!e.body.reply_markup.inline_keyboard.flat().some((b) => b.url?.includes("virustotal.com/gui/url/")));
+});
+await t("تفعيل خيار VirusTotal وحده لا يسمح بالإرسال الخارجي", async () => {
+  const { setSetting } = await import("../src/db.js");
+  await setSetting(env, "vt_enabled", "1");
+  externalCalls.length = 0; reset();
+  await handleUpdate(env, ctx, msg(51, "https://example.com/login"));
+  assert.equal(externalCalls.length, 0);
+  await setSetting(env, "vt_enabled", "0");
 });
 await t("الرابط المختصر لا يُفتح ولا تُخمن وجهته", async () => {
   reset(); await handleUpdate(env, ctx, msg(50, "http://bit.ly/abc"));
