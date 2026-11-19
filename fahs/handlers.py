@@ -217,7 +217,7 @@ def _extract_message_urls(message: Message) -> list[str]:
 async def send_scan(message: Message, raw: str) -> bool:
     actor = message.from_user.id if message.from_user else message.chat.id
     if not _allow_scan(actor):
-        await message.reply("تم بلوغ حد الفحص المؤقت. انتظر دقيقة ثم حاول مجددًا.")
+        await message.reply("تم بلوغ حد الفحص المؤقت. انتظر دقيقة ثم حاول مجددًا.", reply_markup=scan_result_menu())
         return False
     result = await scan_url(raw)
     db.record_scan(result["level"])
@@ -243,10 +243,10 @@ async def send_scan(message: Message, raw: str) -> bool:
         if enabled and auto_delete and message.text is not None and result["level"] in {"خطر حرج", "مرتفع"}:
             try:
                 await message.delete()
-                await message.answer("🛑 <b>حُذف رابط يحمل مؤشرات خطورة مرتفعة.</b>\n" + text, disable_web_page_preview=True)
+                await message.answer("🛑 <b>حُذف رابط يحمل مؤشرات خطورة مرتفعة.</b>\n" + text, reply_markup=scan_result_menu(), disable_web_page_preview=True)
                 return True
             except Exception:
-                await message.reply("🛑 رُصد رابط عالي الخطورة، لكن تعذر حذف الرسالة. راجع صلاحيات البوت.", disable_web_page_preview=True)
+                await message.reply("🛑 رُصد رابط عالي الخطورة، لكن تعذر حذف الرسالة. راجع صلاحيات البوت.", reply_markup=scan_result_menu(), disable_web_page_preview=True)
                 return False
     await message.reply(text, reply_markup=scan_result_menu(), disable_web_page_preview=True)
     return False
