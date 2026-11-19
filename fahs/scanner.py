@@ -131,22 +131,33 @@ async def _openphish_entries() -> set[str]:
     if now < _FEED_CACHE["expires"]:
         return _FEED_CACHE["entries"]
     try:
+        chunks = []
+        total = 0
         async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
-            response = await client.get(feed_url)
-            response.raise_for_status()
-            entries = set()
-            for line in response.text.splitlines():
-                candidate = line.strip()
-                if candidate.startswith("https://") or candidate.startswith("http://"):
-                    try:
-                        normal = _normalise(candidate)
-                        entries.add(normal)
-                    except ValueError:
-                        continue
-            _FEED_CACHE["entries"] = entries
-            _FEED_CACHE["expires"] = now + 900
-            return entries
-    except (httpx.HTTPError, ValueError):
+            async with client.stream("GET", feed_url) as response:
+                response.raise_for_status()
+                declared = response.headers.get("content-length")
+                if declared and int(declared) > 5_000_000:
+                    raise ValueError("OpenPhish feed exceeds the 5 MB safety limit")
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > 5_000_000:
+                        raise ValueError("OpenPhish feed exceeds the 5 MB safety limit")
+                    chunks.append(chunk)
+        body = b"".join(chunks).decode("utf-8", errors="replace")
+        entries = set()
+        for line in body.splitlines():
+            candidate = line.strip()
+            if candidate.startswith("https://") or candidate.startswith("http://"):
+                try:
+                    normal = _normalise(candidate)
+                    entries.add(normal)
+                except ValueError:
+                    continue
+        _FEED_CACHE["entries"] = entries
+        _FEED_CACHE["expires"] = now + 900
+        return entries
+    except (httpx.HTTPError, ValueError, UnicodeError):
         _FEED_CACHE["entries"] = set()
         _FEED_CACHE["expires"] = now + 300
         return set()
