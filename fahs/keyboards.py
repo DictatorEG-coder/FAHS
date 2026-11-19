@@ -32,8 +32,24 @@ def settings_menu(reminders: bool, interval: int = 1):
     ])
 
 def emergency_menu():
-    items = [("شاركت رمز تحقق", "otp"), ("أدخلت كلمة المرور في صفحة مزيفة", "password"), ("حوّلت أموالًا", "money"), ("ثبّت تطبيقًا مشبوهًا", "app"), ("تعرضت للابتزاز", "extortion"), ("فقدت حساب تيليجرام", "telegram"), ("تسربت بياناتي", "leak")]
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=label, callback_data="em:"+code)] for label, code in items]+[[InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")]])
+    items = [
+        ("شاركت رمز تحقق", "otp"),
+        ("أدخلت كلمة المرور في صفحة مزيفة", "password"),
+        ("حوّلت أموالًا", "money"),
+        ("ثبّت تطبيقًا مشبوهًا", "app"),
+        ("تعرضت للابتزاز", "extortion"),
+        ("فقدت حساب تيليجرام", "telegram"),
+        ("تسربت بياناتي", "leak"),
+        ("حسابي مخترق أو جلسة غريبة", "account"),
+        ("فقدت هاتفي أو سُرق", "phone"),
+        ("بيانات بطاقتي مكشوفة", "card"),
+        ("شريحة هاتفي توقفت فجأة", "sim"),
+        ("ضغطت رابطًا مشبوهًا", "link"),
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=label, callback_data="em:" + code)]
+        for label, code in items
+    ] + [[InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")]])
 
 
 def scan_result_menu():
