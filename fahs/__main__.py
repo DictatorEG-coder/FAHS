@@ -21,6 +21,7 @@ async def main():
         BotCommand(command="my_id", description="عرض معرّفك في تيليجرام"),
         BotCommand(command="fahs_on", description="تفعيل فحص روابط المجموعة للمشرفين"),
         BotCommand(command="fahs_off", description="إيقاف فحص روابط المجموعة للمشرفين"),
+        BotCommand(command="fahs_status", description="عرض حالة حماية المجموعة"),
         BotCommand(command="fahs_delete_on", description="تفعيل حذف الروابط عالية الخطورة"),
         BotCommand(command="fahs_delete_off", description="إيقاف الحذف التلقائي"),
         BotCommand(command="fahs_allow", description="استثناء نطاق في المجموعة"),
