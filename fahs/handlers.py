@@ -6,6 +6,7 @@ from fahs import db
 from fahs.content import TIPS, SCAMS, DATA_RISKS, EMERGENCY, QUIZ
 from fahs.keyboards import main_menu, back_menu, settings_menu, emergency_menu
 from fahs.scanner import scan_url
+from fahs.config import settings
 
 router = Router()
 URL_RE = re.compile(r"(?i)(?:https?://|www\.)[^\s<>]+")
@@ -169,3 +170,23 @@ async def quiz_answer(call: CallbackQuery):
     result = "إجابة صحيحة." if int(a) == correct else "ليست الإجابة الصحيحة."
     await call.message.edit_text(f"{result}\n{explanation}", reply_markup=back_menu())
     await call.answer()
+
+@router.callback_query(F.data == "privacy")
+async def privacy(call: CallbackQuery):
+    await call.message.edit_text(
+        "<b>سياسة الخصوصية المختصرة</b>\n"
+        "يحتفظ فَحْص بمعرّف تيليجرام وإعدادات التذكير الاختيارية فقط لتقديم الخدمة. "
+        "لا يحفظ نصوص الروابط المفحوصة افتراضيًا. لا ترسل روابط خاصة أو رموز وصول. "
+        "قد يتصل الفاحص بالنطاق العام للتحقق من التحويلات، ولا يرسل الرابط إلى خدمة سمعة خارجية. "
+        "يمكنك إيقاف التذكيرات في أي وقت. التفاصيل في ملف PRIVACY.md بالمستودع.",
+        reply_markup=back_menu())
+    await call.answer()
+
+@router.message(Command("admin"))
+async def admin_stats(message: Message):
+    if message.from_user.id not in settings.admin_ids:
+        return
+    users, reminders, groups = db.stats()
+    await message.answer(
+        f"<b>لوحة فَحْص</b>\nالمستخدمون المسجلون: {users}\n"
+        f"المشتركون في التذكير: {reminders}\nالمجموعات المفعّل بها الفحص: {groups}")
