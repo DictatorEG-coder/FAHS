@@ -508,6 +508,34 @@ async def about(call: CallbackQuery):
         reply_markup=back_menu())
     await call.answer()
 
+@router.callback_query(F.data == "delete_data_prompt")
+async def delete_data_prompt(call: CallbackQuery):
+    if call.message.chat.type != "private":
+        await call.answer("نفّذ حذف بياناتك في المحادثة الخاصة.", show_alert=True)
+        return
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="نعم، احذف بياناتي", callback_data="delete_data_confirm")],
+        [InlineKeyboardButton(text="إلغاء", callback_data="settings")],
+    ])
+    await call.message.edit_text(
+        "<b>تأكيد حذف البيانات</b>\\nسيحذف فَحْص معرّفك وإعدادات التذكير المخزنة في قاعدة البوت. "
+        "لن يحذف ذلك رسائل تيليجرام أو بيانات تحتفظ بها المنصة أو إحصاءات الفحوصات المجمعة.",
+        reply_markup=keyboard,
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "delete_data_confirm")
+async def delete_data_confirm(call: CallbackQuery):
+    if call.message.chat.type != "private":
+        await call.answer("نفّذ حذف بياناتك في المحادثة الخاصة.", show_alert=True)
+        return
+    db.delete_user(call.from_user.id)
+    await call.message.edit_text(
+        "حُذفت إعداداتك ومعرّفك من قاعدة بيانات فَحْص. يمكنك استخدام البوت مجددًا، وستُنشأ بيانات إعدادات جديدة عند الحاجة.",
+        reply_markup=back_menu(),
+    )
+    await call.answer("تم تنفيذ الحذف من قاعدة البوت.")
+
 @router.callback_query(F.data == "settings")
 async def settings_page(call: CallbackQuery):
     await call.message.edit_text("التذكيرات الإيمانية اختيارية ويمكن إيقافها في أي وقت.", reply_markup=settings_menu(db.get_reminders(call.from_user.id), db.get_reminder_interval(call.from_user.id)))
