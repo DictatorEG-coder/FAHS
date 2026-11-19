@@ -3,6 +3,7 @@ import ipaddress
 import asyncio
 import re
 import socket
+import ssl
 import time
 from difflib import SequenceMatcher
 from urllib.parse import urlsplit, urlunsplit, parse_qsl
@@ -54,6 +55,8 @@ def _resolve_public(host: str) -> list[str]:
 
 def _normalise(raw: str) -> str:
     raw = raw.strip()
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in raw):
+        raise ValueError("يحتوي الرابط على محارف تحكم غير مسموحة")
     if len(raw) > settings.max_url_length:
         raise ValueError("الرابط أطول من الحد المسموح")
     if "://" in raw and not re.match(r"^https?://", raw, re.I):
@@ -71,7 +74,7 @@ def _normalise(raw: str) -> str:
         port = parts.port
     except ValueError:
         raise ValueError("رقم المنفذ غير صالح")
-    if port and port not in {80, 443, 8080, 8443}:
+    if port and port not in {80, 443}:
         raise ValueError("منفذ غير معتاد؛ أُوقف الفحص الوقائي")
     host = parts.hostname.encode("idna").decode("ascii").lower().rstrip(".")
     authority = f"[{host}]" if ":" in host else host
@@ -95,33 +98,90 @@ def _has_sensitive_query(url: str) -> bool:
     return any(SENSITIVE_KEY_RE.search(k) for k, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True))
 
 async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
+    """Follow only HEAD redirects, connecting to the exact IP that passed validation."""
+    from urllib.parse import urljoin
+
     chain, current = [], start
-    headers = {"User-Agent": "FAHS-Security-Link-Inspector/0.1"}
-    async with httpx.AsyncClient(timeout=settings.request_timeout, follow_redirects=False, trust_env=False, headers=headers) as client:
-        for _ in range(settings.max_redirects + 1):
-            parts = urlsplit(current)
+    for _ in range(settings.max_redirects + 1):
+        parts = urlsplit(current)
+        host = parts.hostname or ""
+        try:
+            addresses = await asyncio.to_thread(_resolve_public, host)
+        except ValueError as exc:
+            return chain, str(exc)
+        chain.append(current)
+        if _has_sensitive_query(current):
+            return chain, "توقفنا لأن الرابط يحتوي على معاملات قد تكون رموز وصول أو بيانات حساسة"
+
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        target_ip = addresses[0]
+        tls = ssl.create_default_context() if parts.scheme == "https" else None
+        path = parts.path or "/"
+        if parts.query:
+            path += "?" + parts.query
+        authority = parts.netloc
+        request = (
+            f"HEAD {path} HTTP/1.1\r\n"
+            f"Host: {authority}\r\n"
+            "User-Agent: FAHS-Security-Link-Inspector/0.1\r\n"
+            "Connection: close\r\n\r\n"
+        )
+        writer = None
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(
+                    host=target_ip,
+                    port=port,
+                    ssl=tls,
+                    server_hostname=host if tls else None,
+                ),
+                timeout=settings.request_timeout,
+            )
+            writer.write(request.encode("ascii"))
+            await asyncio.wait_for(writer.drain(), timeout=settings.request_timeout)
+            status_line = await asyncio.wait_for(reader.readline(), timeout=settings.request_timeout)
+            if len(status_line) > 4096 or not status_line.startswith(b"HTTP/"):
+                return chain, "استجابة HTTP غير مفهومة من الموقع"
             try:
-                await asyncio.to_thread(_resolve_public, parts.hostname or "")
-            except ValueError as exc:
-                return chain, str(exc)
-            chain.append(current)
-            if _has_sensitive_query(current):
-                return chain, "توقفنا لأن الرابط يحتوي على معاملات قد تكون رموز وصول أو بيانات حساسة"
-            try:
-                async with client.stream("HEAD", current) as response:
-                    status_code = response.status_code
-                    location = response.headers.get("location")
-                    response_url = response.url
-            except httpx.HTTPError:
-                return chain, "تعذر تأكيد سلسلة التحويلات؛ قد يمنع الموقع طلبات الفحص"
-            if status_code in {405, 501}:
-                return chain, "الموقع لا يدعم طلب HEAD؛ تعذر تأكيد سلسلة التحويلات دون طلب محتوى الصفحة"
-            if status_code not in {301, 302, 303, 307, 308}:
-                return chain, None
-            if not location:
-                return chain, "استجابة تحويل بلا وجهة واضحة"
-            current = _normalise(str(response_url.join(location)))
-        return chain, "تجاوز الرابط الحد الأقصى للتحويلات"
+                status_code = int(status_line.split(b" ", 2)[1])
+            except (IndexError, ValueError):
+                return chain, "تعذر قراءة رمز استجابة HTTP"
+
+            location = None
+            total_header_bytes = len(status_line)
+            while True:
+                line = await asyncio.wait_for(reader.readline(), timeout=settings.request_timeout)
+                total_header_bytes += len(line)
+                if total_header_bytes > 16384:
+                    return chain, "ترويسات استجابة الموقع أكبر من الحد المسموح"
+                if line in (b"\r\n", b"\n", b""):
+                    break
+                if b":" not in line:
+                    continue
+                name, value = line.split(b":", 1)
+                if name.strip().lower() == b"location":
+                    location = value.decode("latin-1").strip()
+        except (OSError, asyncio.TimeoutError, ssl.SSLError, UnicodeError):
+            return chain, "تعذر تأكيد سلسلة التحويلات؛ قد يمنع الموقع طلبات الفحص"
+        finally:
+            if writer is not None:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except OSError:
+                    pass
+
+        if status_code in {405, 501}:
+            return chain, "الموقع لا يدعم طلب HEAD؛ تعذر تأكيد سلسلة التحويلات دون تنزيل محتوى الصفحة"
+        if status_code not in {301, 302, 303, 307, 308}:
+            return chain, None
+        if not location:
+            return chain, "استجابة تحويل بلا وجهة واضحة"
+        try:
+            current = _normalise(urljoin(current, location))
+        except (ValueError, UnicodeError) as exc:
+            return chain, f"وجهة التحويل غير صالحة: {exc}"
+    return chain, "تجاوز الرابط الحد الأقصى للتحويلات"
 
 async def _openphish_entries() -> set[str]:
     feed_url = settings.openphish_feed_url
