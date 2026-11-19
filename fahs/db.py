@@ -110,10 +110,13 @@ def delete_user(user_id: int):
 
 def add_group_domain(chat_id: int, domain: str) -> bool:
     with connect() as db:
+        exists = db.execute("SELECT 1 FROM group_allowlist WHERE chat_id=? AND domain=?", (chat_id, domain)).fetchone()
+        if exists:
+            return True
         count = db.execute("SELECT COUNT(*) FROM group_allowlist WHERE chat_id=?", (chat_id,)).fetchone()[0]
         if count >= 100:
             return False
-        db.execute("INSERT OR IGNORE INTO group_allowlist(chat_id,domain) VALUES(?,?)", (chat_id, domain))
+        db.execute("INSERT INTO group_allowlist(chat_id,domain) VALUES(?,?)", (chat_id, domain))
         return True
 
 def remove_group_domain(chat_id: int, domain: str) -> bool:
