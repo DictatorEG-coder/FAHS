@@ -1,0 +1,11 @@
+services:
+  fahs:
+    build: .
+    container_name: fahs-security
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - fahs-data:/app/data
+volumes:
+  fahs-data:
