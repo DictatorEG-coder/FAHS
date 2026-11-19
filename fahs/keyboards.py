@@ -9,6 +9,7 @@ def main_menu():
         [InlineKeyboardButton(text="🎯 اختبر نفسك", callback_data="quiz"), InlineKeyboardButton(text="💡 نصيحة اليوم", callback_data="tip")],
         [InlineKeyboardButton(text="⚙️ الإعدادات", callback_data="settings"), InlineKeyboardButton(text="ℹ️ عن فَحْص", callback_data="about")],
         [InlineKeyboardButton(text="📖 قاموس الأمن الرقمي", callback_data="glossary")],
+        [InlineKeyboardButton(text="🛡️ حماية المجموعات", callback_data="group_help")],
         [InlineKeyboardButton(text="📜 سياسة الخصوصية", callback_data="privacy")]
     ]
     links = []
