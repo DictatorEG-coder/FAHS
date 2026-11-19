@@ -20,6 +20,8 @@ async def main():
         BotCommand(command="help", description="طريقة الاستخدام"),
         BotCommand(command="fahs_on", description="تفعيل فحص روابط المجموعة للمشرفين"),
         BotCommand(command="fahs_off", description="إيقاف فحص روابط المجموعة للمشرفين"),
+        BotCommand(command="fahs_delete_on", description="تفعيل حذف الروابط عالية الخطورة"),
+        BotCommand(command="fahs_delete_off", description="إيقاف الحذف التلقائي"),
         BotCommand(command="admin", description="إحصاءات المشغّل"),
     ])
     dp = Dispatcher()
