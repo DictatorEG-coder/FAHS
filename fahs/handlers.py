@@ -11,7 +11,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from fahs import db
 from fahs.content import TIPS, SCAMS, AI_SCAMS, DATA_RISKS, EMERGENCY, QUIZ, GLOSSARY
-from fahs.keyboards import main_menu, back_menu, settings_menu, emergency_menu
+from fahs.keyboards import main_menu, back_menu, settings_menu, emergency_menu, scan_result_menu
 from fahs.scanner import scan_url, _normalise
 from fahs.config import settings
 
@@ -248,7 +248,7 @@ async def send_scan(message: Message, raw: str) -> bool:
             except Exception:
                 await message.reply("🛑 رُصد رابط عالي الخطورة، لكن تعذر حذف الرسالة. راجع صلاحيات البوت.", disable_web_page_preview=True)
                 return False
-    await message.reply(text, disable_web_page_preview=True)
+    await message.reply(text, reply_markup=scan_result_menu(), disable_web_page_preview=True)
     return False
 
 
