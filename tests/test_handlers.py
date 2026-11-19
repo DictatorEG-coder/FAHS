@@ -64,5 +64,37 @@ class ScanRateLimitTests(unittest.TestCase):
 
 
 
+
+class SecurityContentTests(unittest.TestCase):
+    def test_quiz_answers_are_valid(self):
+        from fahs.content import QUIZ
+        self.assertGreaterEqual(len(QUIZ), 20)
+        for question, options, correct, explanation in QUIZ:
+            self.assertTrue(question.strip())
+            self.assertGreaterEqual(len(options), 2)
+            self.assertGreaterEqual(correct, 0)
+            self.assertLess(correct, len(options))
+            self.assertTrue(explanation.strip())
+
+    def test_every_emergency_playbook_has_actionable_content(self):
+        from fahs.content import EMERGENCY
+        self.assertGreaterEqual(len(EMERGENCY), 12)
+        for title, instructions in EMERGENCY.items():
+            self.assertTrue(title.strip())
+            self.assertGreater(len(instructions), 80)
+
+    def test_protection_center_has_ten_guides(self):
+        from fahs.handlers import PROTECTION_GUIDES
+        self.assertEqual(len(PROTECTION_GUIDES), 10)
+        for key, (title, body) in PROTECTION_GUIDES.items():
+            self.assertTrue(key.isidentifier())
+            self.assertTrue(title.strip())
+            self.assertGreater(len(body), 150)
+
+    def test_glossary_is_large_enough_for_multiple_pages(self):
+        from fahs.content import GLOSSARY
+        self.assertGreaterEqual(len(GLOSSARY), 10)
+
+
 if __name__ == "__main__":
     unittest.main()
