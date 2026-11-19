@@ -5,15 +5,17 @@ services:
     restart: unless-stopped
     init: true
     read_only: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
     env_file:
       - .env
     volumes:
       - fahs-data:/app/data
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
 volumes:
   fahs-data:
