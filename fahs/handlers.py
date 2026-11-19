@@ -114,8 +114,13 @@ async def group_allowlist(message: Message):
     if not await _require_group_admin(message):
         return
     domains = db.list_group_domains(message.chat.id)
-    body = "\n".join(f"• <code>{escape(domain)}</code>" for domain in domains) or "القائمة فارغة."
-    await message.reply("<b>النطاقات المستثناة في هذه المجموعة</b>\n" + body)
+    if not domains:
+        await message.reply("قائمة الاستثناءات فارغة.")
+        return
+    for offset in range(0, len(domains), 12):
+        body = "\n".join(f"• <code>{escape(domain)}</code>" for domain in domains[offset:offset + 12])
+        title = "<b>النطاقات المستثناة في هذه المجموعة</b>\n" if offset == 0 else ""
+        await message.reply(title + body)
 
 @router.message(Command("fahs_off"))
 async def group_off(message: Message):
