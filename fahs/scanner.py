@@ -74,9 +74,17 @@ def _normalise(raw: str) -> str:
         port = parts.port
     except ValueError:
         raise ValueError("رقم المنفذ غير صالح")
-    if port and port not in {80, 443}:
+    if port is not None and port not in {80, 443}:
         raise ValueError("منفذ غير معتاد؛ أُوقف الفحص الوقائي")
+    if port is not None and ((parts.scheme.lower() == "https" and port != 443) or (parts.scheme.lower() == "http" and port != 80)):
+        raise ValueError("المنفذ لا يتوافق مع بروتوكول الرابط")
     host = parts.hostname.encode("idna").decode("ascii").lower().rstrip(".")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        labels = host.split(".")
+        if len(host) > 253 or any(not re.fullmatch(r"(?!-)[a-z0-9-]{1,63}(?<!-)", label) for label in labels):
+            raise ValueError("اسم النطاق يحتوي على صياغة غير صالحة")
     authority = f"[{host}]" if ":" in host else host
     authority += f":{port}" if port else ""
     return urlunsplit((parts.scheme.lower(), authority, parts.path or "/", parts.query, ""))
