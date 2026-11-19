@@ -166,7 +166,7 @@ async def about(call: CallbackQuery):
 
 @router.callback_query(F.data == "settings")
 async def settings_page(call: CallbackQuery):
-    await call.message.edit_text("التذكيرات الإيمانية اختيارية ويمكن إيقافها في أي وقت.", reply_markup=settings_menu(db.get_reminders(call.from_user.id)))
+    await call.message.edit_text("التذكيرات الإيمانية اختيارية ويمكن إيقافها في أي وقت.", reply_markup=settings_menu(db.get_reminders(call.from_user.id), db.get_reminder_interval(call.from_user.id)))
     await call.answer()
 
 @router.callback_query(F.data == "reminders_toggle")
@@ -174,7 +174,7 @@ async def reminders_toggle(call: CallbackQuery):
     enabled = not db.get_reminders(call.from_user.id)
     db.set_reminders(call.from_user.id, enabled)
     note = "فُعّلت التذكيرات الاختيارية." if enabled else "أُوقفت التذكيرات."
-    await call.message.edit_text(note + "\nتصل التذكيرات مرة يوميًا في موعد ثابت، ويمكنك إيقافها من هنا.", reply_markup=settings_menu(enabled))
+    await call.message.edit_text(note + "\nتصل التذكيرات مرة يوميًا في موعد ثابت، ويمكنك إيقافها من هنا.", reply_markup=settings_menu(enabled, db.get_reminder_interval(call.from_user.id)))
     await call.answer()
 
 @router.callback_query(F.data == "quiz")
@@ -212,4 +212,15 @@ async def glossary(call: CallbackQuery):
     body = "<b>قاموس الأمن الرقمي</b>\n\n" + "\n\n".join(
         f"<b>{term}</b>\n{meaning}" for term, meaning in GLOSSARY.items())
     await call.message.edit_text(body, reply_markup=back_menu())
+    await call.answer()
+
+@router.callback_query(F.data == "reminder_interval_toggle")
+async def reminder_interval_toggle(call: CallbackQuery):
+    current = db.get_reminder_interval(call.from_user.id)
+    updated = 2 if current == 1 else 1
+    db.set_reminder_interval(call.from_user.id, updated)
+    label = "كل يومين" if updated == 2 else "يوميًا"
+    await call.message.edit_text(
+        f"تم ضبط التذكير {label}. موعد الإرسال الحالي 10:00 صباحًا بتوقيت القاهرة.",
+        reply_markup=settings_menu(db.get_reminders(call.from_user.id), updated))
     await call.answer()
