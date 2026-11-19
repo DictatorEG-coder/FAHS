@@ -13,12 +13,3 @@ export function makeD1() {
     batch: async (list) => { const out = []; for (const s of list) out.push(await s.run()); return out; },
   };
 }
-
-
-
-
-.gitignore
-node_modules/
-.dev.vars
-.wrangler/
-*.log
