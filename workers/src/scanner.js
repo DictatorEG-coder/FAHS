@@ -1,4 +1,4 @@
-// فحص الروابط: حماية SSRF + تتبع التحويلات + تحليل محلي + VirusTotal
+// فحص محلي يحافظ على الخصوصية؛ لا يفتح وجهة الرابط أو يتتبع تحويلاتها
 import { b64url, esc, sleep } from "./util.js";
 
 const SHORTENERS = new Set([
