@@ -1,5 +1,6 @@
 """Conservative URL inspection. This is indicator-based, never a safety guarantee."""
 import ipaddress
+import json
 import asyncio
 import re
 import socket
@@ -11,6 +12,7 @@ import httpx
 from fahs.config import settings
 
 _FEED_CACHE = {"expires": 0.0, "entries": set()}
+_URLHAUS_CACHE = {"expires": 0.0, "entries": {}}
 _SCAN_SEMAPHORE = asyncio.Semaphore(8)
 
 SUSPICIOUS_WORDS = {
@@ -232,6 +234,54 @@ async def _openphish_entries() -> set[str]:
         _FEED_CACHE["expires"] = now + 300
         return set()
 
+
+def _parse_urlhaus_entries(payload: dict) -> dict[str, str]:
+    entries = {}
+    if payload.get("query_status") != "ok":
+        return entries
+    for item in payload.get("urls", []):
+        if not isinstance(item, dict) or item.get("threat") != "malware_download":
+            continue
+        candidate = item.get("url")
+        if not isinstance(candidate, str):
+            continue
+        try:
+            entries[_normalise(candidate)] = str(item.get("url_status", "unknown")).lower()
+        except (ValueError, UnicodeError):
+            continue
+    return entries
+
+async def _urlhaus_entries() -> dict[str, str]:
+    auth_key = settings.urlhaus_auth_key
+    if not auth_key:
+        return {}
+    now = time.monotonic()
+    if now < _URLHAUS_CACHE["expires"]:
+        return _URLHAUS_CACHE["entries"]
+    endpoint = "https://urlhaus-api.abuse.ch/v1/urls/recent/limit/1000/"
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=False, trust_env=False) as client:
+            async with client.stream(
+                "GET", endpoint,
+                headers={"Auth-Key": auth_key, "User-Agent": "FAHS-Security-Link-Inspector/0.1"},
+            ) as response:
+                response.raise_for_status()
+                chunks, total = [], 0
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > 5 * 1024 * 1024:
+                        raise ValueError("URLhaus response exceeds the 5 MiB limit")
+                    chunks.append(chunk)
+            payload = json.loads(b"".join(chunks).decode("utf-8"))
+        entries = _parse_urlhaus_entries(payload)
+        _URLHAUS_CACHE["entries"] = entries
+        _URLHAUS_CACHE["expires"] = now + 900
+        return entries
+    except (httpx.HTTPError, ValueError, UnicodeError, TypeError, json.JSONDecodeError):
+        _URLHAUS_CACHE["entries"] = {}
+        _URLHAUS_CACHE["expires"] = now + 300
+        return {}
+
 async def _scan_url(raw: str) -> dict:
     try:
         url = _normalise(raw)
@@ -241,10 +291,17 @@ async def _scan_url(raw: str) -> dict:
         return {"level": "تعذر إكمال الفحص", "score": 0, "reasons": [str(exc)], "url": "", "host": "", "chain": []}
 
     feed_entries = await _openphish_entries()
+    urlhaus_entries = await _urlhaus_entries()
     if url in feed_entries:
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابق الرابط حرفيًا مع مؤشر وارد في مصدر OpenPhish المفعّل."],
                 "url": url, "host": host, "ips": [], "chain": [], "source": "OpenPhish"}
+    if url in urlhaus_entries:
+        status = urlhaus_entries[url]
+        severity = "خطر حرج" if status == "online" else "مرتفع"
+        return {"level": severity, "score": 10 if status == "online" else 7,
+                "reasons": [f"الرابط مطابق لسجل URLhaus الخاص بتوزيع برمجيات خبيثة؛ الحالة المسجلة: {status}."],
+                "url": url, "host": host, "ips": [], "chain": [], "source": "URLhaus"}
     try:
         addresses = await asyncio.to_thread(_resolve_public, host)
     except (ValueError, UnicodeError) as exc:
@@ -293,6 +350,12 @@ async def _scan_url(raw: str) -> dict:
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابقت إحدى وجهات التحويل مع مؤشر وارد في مصدر OpenPhish المفعّل."],
                 "url": url, "host": host, "ips": addresses, "chain": chain, "source": "OpenPhish"}
+    matched_urlhaus = next((urlhaus_entries[step] for step in chain if step in urlhaus_entries), None)
+    if matched_urlhaus is not None:
+        severity = "خطر حرج" if matched_urlhaus == "online" else "مرتفع"
+        return {"level": severity, "score": 10 if matched_urlhaus == "online" else 7,
+                "reasons": [f"تطابقت إحدى وجهات التحويل مع سجل URLhaus؛ الحالة المسجلة: {matched_urlhaus}."],
+                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "URLhaus"}
     if len(chain) > 1:
         score += 1
         reasons.append(f"رُصدت {len(chain)-1} عملية تحويل")
