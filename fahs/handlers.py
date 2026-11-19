@@ -68,8 +68,8 @@ async def admin_stats(message: Message):
         return
     users, reminders, groups = db.stats()
     await message.answer(
-        f"<b>لوحة فَحْص</b>\\nالمستخدمون المسجلون: {users}\\n"
-        f"المشتركون في التذكير: {reminders}\\nالمجموعات المفعّل بها الفحص: {groups}")
+        f"<b>لوحة فَحْص</b>\nالمستخدمون المسجلون: {users}\n"
+        f"المشتركون في التذكير: {reminders}\nالمجموعات المفعّل بها الفحص: {groups}")
 
 @router.message(F.text)
 async def text_router(message: Message):
