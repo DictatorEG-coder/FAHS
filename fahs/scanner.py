@@ -113,7 +113,6 @@ async def _openphish_entries() -> set[str]:
                     try:
                         normal = _normalise(candidate)
                         entries.add(normal)
-                        entries.add(urlsplit(normal).hostname or "")
                     except ValueError:
                         continue
             _FEED_CACHE["entries"] = entries
@@ -163,13 +162,17 @@ async def scan_url(raw: str) -> dict:
         chain, redirect_note = [url], str(exc)
     if redirect_note:
         reasons.append(redirect_note)
+        if any(term in redirect_note for term in ("غير عام", "خاصة", "محلية", "تجاوز")):
+            score = max(score, 4)
     if len(chain) > 1:
         score += 1
         reasons.append(f"رُصدت {len(chain)-1} عملية تحويل")
     if redirect_note and "تجاوز" in redirect_note:
         score += 2
 
-    if score >= 4:
+    if redirect_note and score == 0:
+        level = "تعذر إكمال الفحص"
+    elif score >= 4:
         level = "مرتفع"
     elif score >= 2:
         level = "متوسط"
