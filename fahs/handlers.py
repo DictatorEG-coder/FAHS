@@ -161,6 +161,22 @@ async def group_allowlist(message: Message):
         title = "<b>النطاقات المستثناة في هذه المجموعة</b>\n" if offset == 0 else ""
         await message.reply(title + body)
 
+@router.message(Command("fahs_status"))
+async def group_status(message: Message):
+    if not await _require_group_admin(message):
+        return
+    enabled, auto_delete = db.get_group(message.chat.id)
+    domains = db.list_group_domains(message.chat.id)
+    scan_label = "مفعّل" if enabled else "متوقف"
+    delete_label = "مفعّل" if auto_delete else "متوقف"
+    await message.reply(
+        "<b>حالة حماية فَحْص في هذه المجموعة</b>\\n"
+        f"فحص الروابط: <b>{scan_label}</b>\\n"
+        f"الحذف التلقائي: <b>{delete_label}</b>\\n"
+        f"النطاقات المستثناة: <b>{len(domains)} / 100</b>"
+    )
+
+
 @router.message(Command("fahs_off"))
 async def group_off(message: Message):
     if message.chat.type not in {"group", "supergroup"} or not message.from_user:
