@@ -9,7 +9,7 @@ from fahs.scanner import scan_url
 from fahs.config import settings
 
 router = Router()
-URL_RE = re.compile(r"(?i)(?:(?:https?://|www\\.)[^\\s<>]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}(?::\\d+)?(?:/[^\\s<>]*)?)")
+URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?)")
 TIP_TEXT = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ\n\nاللهم صلِّ وسلم على نبينا محمد."
 
 def welcome():
@@ -195,7 +195,7 @@ async def privacy(call: CallbackQuery):
 
 @router.callback_query(F.data == "glossary")
 async def glossary(call: CallbackQuery):
-    body = "<b>قاموس الأمن الرقمي</b>\\n\\n" + "\\n\\n".join(
-        f"<b>{term}</b>\\n{meaning}" for term, meaning in GLOSSARY.items())
+    body = "<b>قاموس الأمن الرقمي</b>\n\n" + "\n\n".join(
+        f"<b>{term}</b>\n{meaning}" for term, meaning in GLOSSARY.items())
     await call.message.edit_text(body, reply_markup=back_menu())
     await call.answer()
