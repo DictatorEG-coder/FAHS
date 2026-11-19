@@ -23,6 +23,7 @@ async def main():
         BotCommand(command="fahs_delete_on", description="تفعيل حذف الروابط عالية الخطورة"),
         BotCommand(command="fahs_delete_off", description="إيقاف الحذف التلقائي"),
         BotCommand(command="admin", description="إحصاءات المشغّل"),
+        BotCommand(command="delete_my_data", description="حذف بياناتك من قاعدة البوت"),
     ])
     dp = Dispatcher()
     dp.include_router(router)
