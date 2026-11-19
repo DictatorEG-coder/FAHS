@@ -1,4 +1,6 @@
 import unittest
+import socket
+from unittest.mock import patch
 from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike, _parse_urlhaus_entries
 
 class ScannerUnitTests(unittest.TestCase):
@@ -87,6 +89,23 @@ class ScannerUnitTests(unittest.TestCase):
         }
         self.assertEqual(_parse_urlhaus_entries(payload),
                          {"https://bad.example/payload": "online"})
+
+    def test_rejects_dns_answers_mixing_public_and_private_ips(self):
+        answers = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 0)),
+        ]
+        with patch("fahs.scanner.socket.getaddrinfo", return_value=answers):
+            with self.assertRaises(ValueError):
+                _resolve_public("mixed.example")
+
+    def test_accepts_only_public_dns_answers(self):
+        answers = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
+        ]
+        with patch("fahs.scanner.socket.getaddrinfo", return_value=answers):
+            self.assertEqual(_resolve_public("public.example"), ["1.1.1.1", "8.8.8.8"])
 
     def test_rejects_loopback_address(self):
         with self.assertRaises(ValueError):
