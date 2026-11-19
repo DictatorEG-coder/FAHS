@@ -88,12 +88,14 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
             if _has_sensitive_query(current):
                 return chain, "توقفنا لأن الرابط يحتوي على معاملات قد تكون رموز وصول أو بيانات حساسة"
             try:
-                async with client.stream("GET", current, headers={"Range": "bytes=0-0"}) as response:
+                async with client.stream("HEAD", current) as response:
                     status_code = response.status_code
                     location = response.headers.get("location")
                     response_url = response.url
             except httpx.HTTPError:
                 return chain, "تعذر تأكيد سلسلة التحويلات؛ قد يمنع الموقع طلبات الفحص"
+            if status_code in {405, 501}:
+                return chain, "الموقع لا يدعم طلب HEAD؛ تعذر تأكيد سلسلة التحويلات دون طلب محتوى الصفحة"
             if status_code not in {301, 302, 303, 307, 308}:
                 return chain, None
             if not location:
