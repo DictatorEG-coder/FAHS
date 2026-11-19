@@ -466,22 +466,51 @@ async def reminders_toggle(call: CallbackQuery):
     await call.message.edit_text(note + "\nتصل التذكيرات وفق التكرار المحدد، ويمكنك إيقافها من هنا.", reply_markup=settings_menu(enabled, db.get_reminder_interval(call.from_user.id)))
     await call.answer()
 
-@router.callback_query(F.data == "quiz")
-async def quiz(call: CallbackQuery):
+async def _send_quiz_question(call: CallbackQuery):
     import random
     index = random.randrange(len(QUIZ))
-    question, options, correct, explanation = QUIZ[index]
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    rows = [[InlineKeyboardButton(text=opt, callback_data=f"q:{index}:{i}") for i,opt in enumerate(options)]]
-    await call.message.edit_text("🎯 <b>اختبر نفسك</b>\n" + question, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    question, options, _, _ = QUIZ[index]
+    rows = [[
+        InlineKeyboardButton(text=opt, callback_data=f"q:{index}:{i}")
+        for i, opt in enumerate(options)
+    ]]
+    rows.append([InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")])
+    await call.message.edit_text(
+        "🎯 <b>اختبر نفسك</b>\n" + question,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+@router.callback_query(F.data == "quiz")
+async def quiz(call: CallbackQuery):
+    await _send_quiz_question(call)
+    await call.answer()
+
+@router.callback_query(F.data == "quiz_next")
+async def quiz_next(call: CallbackQuery):
+    await _send_quiz_question(call)
     await call.answer()
 
 @router.callback_query(F.data.startswith("q:"))
 async def quiz_answer(call: CallbackQuery):
-    _, q, a = call.data.split(":")
-    question, options, correct, explanation = QUIZ[int(q)]
-    result = "إجابة صحيحة." if int(a) == correct else "ليست الإجابة الصحيحة."
-    await call.message.edit_text(f"{result}\n{explanation}", reply_markup=back_menu())
+    try:
+        _, raw_question, raw_answer = call.data.split(":")
+        question_index, answer_index = int(raw_question), int(raw_answer)
+        question, options, correct, explanation = QUIZ[question_index]
+        if answer_index < 0 or answer_index >= len(options):
+            raise ValueError("invalid answer")
+    except (ValueError, IndexError):
+        await call.answer("انتهت صلاحية هذا السؤال. ابدأ اختبارًا جديدًا.", show_alert=True)
+        return
+
+    result = "✅ إجابة صحيحة." if answer_index == correct else "❌ ليست الإجابة الصحيحة."
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎯 سؤال آخر", callback_data="quiz_next")],
+        [InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")],
+    ])
+    await call.message.edit_text(
+        f"{result}\n\n{escape(explanation)}",
+        reply_markup=keyboard,
+    )
     await call.answer()
 
 @router.callback_query(F.data == "privacy")
