@@ -30,4 +30,5 @@ def settings_menu(reminders: bool):
     ])
 
 def emergency_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=x, callback_data="em:"+x)] for x in ("شاركت رمز تحقق","أدخلت كلمة المرور في صفحة مزيفة","حوّلت أموالًا","ثبّت تطبيقًا مشبوهًا","تعرضت للابتزاز")]+[[InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")]])
+    items = [("شاركت رمز تحقق", "otp"), ("أدخلت كلمة المرور في صفحة مزيفة", "password"), ("حوّلت أموالًا", "money"), ("ثبّت تطبيقًا مشبوهًا", "app"), ("تعرضت للابتزاز", "extortion")]
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=label, callback_data="em:"+code)] for label, code in items]+[[InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")]])
