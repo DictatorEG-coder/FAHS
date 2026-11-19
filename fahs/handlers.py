@@ -144,6 +144,7 @@ async def send_scan(message: Message, raw: str) -> bool:
         return False
     events.append(now)
     result = await scan_url(raw)
+    db.record_scan(result["level"])
     reasons = "\n".join("• " + escape(x) for x in result["reasons"])
     host = escape(result.get("host") or "غير متاح")
     source = escape(result.get("source") or "تحليل محلي")
