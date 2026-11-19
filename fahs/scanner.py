@@ -80,6 +80,8 @@ def _normalise(raw: str) -> str:
         raise ValueError("منفذ غير معتاد؛ أُوقف الفحص الوقائي")
     if port is not None and ((parts.scheme.lower() == "https" and port != 443) or (parts.scheme.lower() == "http" and port != 80)):
         raise ValueError("المنفذ لا يتوافق مع بروتوكول الرابط")
+    if port == (443 if parts.scheme.lower() == "https" else 80):
+        port = None
     host = parts.hostname.encode("idna").decode("ascii").lower().rstrip(".")
     try:
         ipaddress.ip_address(host)
