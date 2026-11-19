@@ -12,6 +12,9 @@ const COMMANDS = [
   { command: "start", description: "القائمة الرئيسية" },
   { command: "scan", description: "فحص رابط" },
   { command: "help", description: "المساعدة" },
+  { command: "fahs_on", description: "تفعيل فحص روابط المجموعة للمشرفين" },
+  { command: "fahs_off", description: "إيقاف فحص روابط المجموعة للمشرفين" },
+  { command: "fahs_status", description: "حالة حماية المجموعة" },
 ];
 
 const SCAN_KB = kb([[btn("🔍 فحص رابط آخر", "scan"), btn("🏠 الرئيسية", "home")]]);
@@ -22,7 +25,7 @@ async function doScan(env, chatId, uid, rawUrls, owner) {
     const ok = await rateLimit(env, `scan:${uid}`, 3600, limit);
     if (!ok) return send(env, chatId, "⏳ وصلت للحد الأقصى من عمليات الفحص هذه الساعة. حاول لاحقاً.", { reply_markup: SCAN_KB });
   }
-  const useVt = (await getSetting(env, "vt_enabled")) === "1";
+  const useVt = (await getSetting(env, "vt_enabled")) === "1" && !!env.VT_API_KEY;
   for (const raw of rawUrls) {
     const wait = await send(env, chatId, "⏳ جارٍ فحص الرابط... قد يستغرق حتى 20 ثانية.");
     let res;
@@ -51,7 +54,32 @@ async function doScan(env, chatId, uid, rawUrls, owner) {
 }
 
 async function onMessage(env, ctx, m) {
-  if (m.chat.type !== "private" || !m.from || m.from.is_bot) return;
+  if (!m.from || m.from.is_bot) return;
+  if (m.chat.type !== "private") {
+    const uid = m.from.id;
+    const groupText = m.text || m.caption || "";
+    const groupCmd = groupText.startsWith("/") ? groupText.split(/[\\s@]/)[0].toLowerCase() : null;
+    if (["/fahs_on", "/fahs_off", "/fahs_status"].includes(groupCmd)) {
+      const member = await tg(env, "getChatMember", { chat_id: m.chat.id, user_id: uid });
+      const status = member?.result?.status;
+      if (!member.ok || !["creator", "administrator"].includes(status)) {
+        return send(env, m.chat.id, "هذه الأوامر متاحة لمشرفي المجموعة فقط.");
+      }
+      const current = await env.DB.prepare("SELECT enabled FROM group_settings WHERE chat_id=?").bind(m.chat.id).first();
+      if (groupCmd === "/fahs_status") {
+        return send(env, m.chat.id, current?.enabled ? "🟢 حماية فَحْص مفعّلة في هذه المجموعة." : "⚪ حماية فَحْص متوقفة في هذه المجموعة.");
+      }
+      const enabled = groupCmd === "/fahs_on" ? 1 : 0;
+      await run(env, "INSERT INTO group_settings (chat_id,enabled,updated) VALUES (?,?,?) ON CONFLICT(chat_id) DO UPDATE SET enabled=excluded.enabled,updated=excluded.updated", m.chat.id, enabled, now());
+      return send(env, m.chat.id, enabled ? "🛡 تم تفعيل فحص الروابط في هذه المجموعة." : "تم إيقاف فحص الروابط في هذه المجموعة.");
+    }
+    const setting = await env.DB.prepare("SELECT enabled FROM group_settings WHERE chat_id=?").bind(m.chat.id).first();
+    if (!setting?.enabled) return;
+    if (!(await rateLimit(env, "group-scan:" + uid, 60, 8))) return;
+    const groupUrls = extractUrls(groupText, m.entities || m.caption_entities || []);
+    if (groupUrls.length) return doScan(env, m.chat.id, uid, groupUrls, false);
+    return;
+  }
   const uid = m.from.id;
   const owner = isOwnerId(env, uid);
   const user = await touchUser(env, uid);
@@ -150,20 +178,20 @@ export default {
         );
         return new Response("ok");
       }
-      if (url.pathname === "/setup") {
-        if (!safeEqual(url.searchParams.get("key") || "", env.WEBHOOK_SECRET)) return new Response("forbidden", { status: 403 });
+      if (url.pathname === "/setup" && request.method === "POST") {
+        if (!safeEqual(request.headers.get("x-fahs-setup-secret") || "", env.WEBHOOK_SECRET)) return new Response("forbidden", { status: 403 });
         await ensureDb(env);
         const hook = await tg(env, "setWebhook", {
           url: `${url.origin}/webhook`,
           secret_token: env.WEBHOOK_SECRET,
           allowed_updates: ["message", "callback_query", "my_chat_member"],
-          drop_pending_updates: true,
         });
         await tg(env, "setMyCommands", { commands: COMMANDS });
         return new Response(JSON.stringify({ webhook: hook.ok, description: hook.description, vt_key: !!env.VT_API_KEY }, null, 2), {
           headers: { "content-type": "application/json" },
         });
       }
+      if (url.pathname === "/setup") return new Response("استخدم POST مع ترويسة x-fahs-setup-secret لإعداد Webhook.", { status: 405, headers: { Allow: "POST" } });
       return new Response("FAHS bot is running ✅", { status: 200 });
     } catch (e) {
       console.log("fetch error:", e?.stack || e?.message);
