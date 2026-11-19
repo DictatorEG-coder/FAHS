@@ -146,7 +146,7 @@ async def _scan_url(raw: str) -> dict:
     feed_entries = await _openphish_entries()
     if url in feed_entries:
         return {"level": "خطر حرج", "score": 10,
-                "reasons": ["تطابق الرابط أو النطاق مع مؤشر وارد في مصدر OpenPhish المفعّل."],
+                "reasons": ["تطابق الرابط حرفيًا مع مؤشر وارد في مصدر OpenPhish المفعّل."],
                 "url": url, "host": host, "ips": addresses, "chain": [], "source": "OpenPhish"}
     if host in SHORTENERS:
         score += 1
