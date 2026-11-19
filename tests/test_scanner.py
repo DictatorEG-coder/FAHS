@@ -21,6 +21,18 @@ class ScannerUnitTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _normalise("https://example.com:8080/")
 
+    def test_rejects_zero_port(self):
+        with self.assertRaises(ValueError):
+            _normalise("https://example.com:0/")
+
+    def test_rejects_scheme_port_mismatch(self):
+        with self.assertRaises(ValueError):
+            _normalise("https://example.com:80/")
+
+    def test_rejects_invalid_dns_label(self):
+        with self.assertRaises(ValueError):
+            _normalise("https://bad..example.com/")
+
     def test_detects_sensitive_query_parameter(self):
         self.assertTrue(_has_sensitive_query("https://example.com/?access_token=secret"))
 
