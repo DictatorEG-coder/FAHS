@@ -3,6 +3,14 @@ services:
     build: .
     container_name: fahs-security
     restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
     env_file:
       - .env
     volumes:
