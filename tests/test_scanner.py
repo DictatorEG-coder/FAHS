@@ -13,6 +13,14 @@ class ScannerUnitTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _normalise("https://user:pass@example.com")
 
+    def test_rejects_control_characters(self):
+        with self.assertRaises(ValueError):
+            _normalise("https://example.com/\r\nHost: localhost")
+
+    def test_rejects_unusual_ports(self):
+        with self.assertRaises(ValueError):
+            _normalise("https://example.com:8080/")
+
     def test_detects_sensitive_query_parameter(self):
         self.assertTrue(_has_sensitive_query("https://example.com/?access_token=secret"))
 
