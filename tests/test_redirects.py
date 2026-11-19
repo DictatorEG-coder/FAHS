@@ -32,10 +32,12 @@ class FakeWriter:
 
 class RedirectSecurityTests(unittest.IsolatedAsyncioTestCase):
     async def test_connects_to_validated_ip_and_keeps_hostname_for_tls(self):
-        reader = FakeReader([b"HTTP/1.1 200 OK\\r\\n", b"\\r\\n"])
+        reader = FakeReader([b"HTTP/1.1 200 OK\r\n", b"\r\n"])
         writer = FakeWriter()
-        with patch("fahs.scanner._resolve_public", return_value=["93.184.216.34"]), \\
-             patch("fahs.scanner.asyncio.open_connection", new_callable=AsyncMock) as connect:
+        with (
+            patch("fahs.scanner._resolve_public", return_value=["93.184.216.34"]),
+            patch("fahs.scanner.asyncio.open_connection", new_callable=AsyncMock) as connect,
+        ):
             connect.return_value = (reader, writer)
             chain, note = await _redirect_chain("https://example.com/")
 
@@ -47,15 +49,18 @@ class RedirectSecurityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_revalidates_redirect_destination_before_connecting(self):
         reader = FakeReader([
-            b"HTTP/1.1 302 Found\\r\\n",
-            b"Location: http://127.0.0.1/\\r\\n",
-            b"\\r\\n",
+            b"HTTP/1.1 302 Found\r\n",
+            b"Location: http://127.0.0.1/\r\n",
+            b"\r\n",
         ])
         writer = FakeWriter()
-        with patch("fahs.scanner._resolve_public", side_effect=[
-            ["93.184.216.34"],
-            ValueError("العنوان يشير إلى شبكة خاصة أو محلية"),
-        ]), patch("fahs.scanner.asyncio.open_connection", new_callable=AsyncMock) as connect:
+        with (
+            patch("fahs.scanner._resolve_public", side_effect=[
+                ["93.184.216.34"],
+                ValueError("العنوان يشير إلى شبكة خاصة أو محلية"),
+            ]),
+            patch("fahs.scanner.asyncio.open_connection", new_callable=AsyncMock) as connect,
+        ):
             connect.return_value = (reader, writer)
             chain, note = await _redirect_chain("https://example.com/")
 
