@@ -11,8 +11,8 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, quote
 import httpx
 from fahs.config import settings
 
-_FEED_CACHE = {"expires": 0.0, "entries": set()}
-_URLHAUS_CACHE = {"expires": 0.0, "entries": {}}
+_FEED_CACHE = {"expires": 0.0, "entries": set(), "status": "disabled"}
+_URLHAUS_CACHE = {"expires": 0.0, "entries": {}, "status": "disabled"}
 _SCAN_SEMAPHORE = asyncio.Semaphore(8)
 
 SUSPICIOUS_WORDS = {
@@ -205,12 +205,17 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
 
 async def _openphish_entries() -> set[str]:
     feed_url = settings.openphish_feed_url
+    if not feed_url:
+        _FEED_CACHE["status"] = "disabled"
+        return set()
     try:
         feed_parts = urlsplit(feed_url)
         if (feed_parts.scheme != "https" or feed_parts.hostname != "openphish.com"
                 or feed_parts.port not in (None, 443) or feed_parts.username or feed_parts.password):
+            _FEED_CACHE["status"] = "disabled"
             return set()
     except ValueError:
+        _FEED_CACHE["status"] = "disabled"
         return set()
 
     now = time.monotonic()
@@ -237,10 +242,12 @@ async def _openphish_entries() -> set[str]:
                     except (ValueError, UnicodeError):
                         continue
             _FEED_CACHE["entries"] = entries
+            _FEED_CACHE["status"] = "available"
             _FEED_CACHE["expires"] = now + 900
             return entries
     except (httpx.HTTPError, ValueError, UnicodeError):
         _FEED_CACHE["entries"] = set()
+        _FEED_CACHE["status"] = "unavailable"
         _FEED_CACHE["expires"] = now + 300
         return set()
 
@@ -264,6 +271,7 @@ def _parse_urlhaus_entries(payload: dict) -> dict[str, str]:
 async def _urlhaus_entries() -> dict[str, str]:
     auth_key = settings.urlhaus_auth_key
     if not auth_key:
+        _URLHAUS_CACHE["status"] = "disabled"
         return {}
     now = time.monotonic()
     if now < _URLHAUS_CACHE["expires"]:
@@ -285,10 +293,12 @@ async def _urlhaus_entries() -> dict[str, str]:
             payload = json.loads(b"".join(chunks).decode("utf-8"))
         entries = _parse_urlhaus_entries(payload)
         _URLHAUS_CACHE["entries"] = entries
+        _URLHAUS_CACHE["status"] = "available"
         _URLHAUS_CACHE["expires"] = now + 900
         return entries
     except (httpx.HTTPError, ValueError, UnicodeError, TypeError, json.JSONDecodeError):
         _URLHAUS_CACHE["entries"] = {}
+        _URLHAUS_CACHE["status"] = "unavailable"
         _URLHAUS_CACHE["expires"] = now + 300
         return {}
 
@@ -302,6 +312,14 @@ async def _scan_url(raw: str) -> dict:
 
     feed_entries = await _openphish_entries()
     urlhaus_entries = await _urlhaus_entries()
+    sources_checked = [
+        name for name, cache in (("OpenPhish", _FEED_CACHE), ("URLhaus", _URLHAUS_CACHE))
+        if cache["status"] == "available"
+    ]
+    sources_unavailable = [
+        name for name, cache in (("OpenPhish", _FEED_CACHE), ("URLhaus", _URLHAUS_CACHE))
+        if cache["status"] == "unavailable"
+    ]
     if url in feed_entries:
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابق الرابط حرفيًا مع مؤشر وارد في مصدر OpenPhish المفعّل."],
@@ -359,13 +377,15 @@ async def _scan_url(raw: str) -> dict:
     if any(step in feed_entries for step in chain):
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابقت إحدى وجهات التحويل مع مؤشر وارد في مصدر OpenPhish المفعّل."],
-                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "OpenPhish"}
+                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "OpenPhish",
+                "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
     matched_urlhaus = next((urlhaus_entries[step] for step in chain if step in urlhaus_entries), None)
     if matched_urlhaus is not None:
         severity = "خطر حرج" if matched_urlhaus == "online" else "مرتفع"
         return {"level": severity, "score": 10 if matched_urlhaus == "online" else 7,
                 "reasons": [f"تطابقت إحدى وجهات التحويل مع سجل URLhaus؛ الحالة المسجلة: {matched_urlhaus}."],
-                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "URLhaus"}
+                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "URLhaus",
+                "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
     if len(chain) > 1:
         score += 1
         reasons.append(f"رُصدت {len(chain)-1} عملية تحويل")
@@ -384,7 +404,8 @@ async def _scan_url(raw: str) -> dict:
         level = "لم تظهر مؤشرات اشتباه أولية"
 
     return {"level": level, "score": score, "reasons": reasons or ["لم تظهر مؤشرات تركيبية واضحة."],
-            "url": url, "host": host, "ips": addresses, "chain": chain}
+            "url": url, "host": host, "ips": addresses, "chain": chain,
+            "sources_checked": sources_checked, "sources_unavailable": sources_unavailable}
 
 
 async def scan_url(raw: str) -> dict:
