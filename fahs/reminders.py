@@ -11,14 +11,19 @@ MESSAGES = [
 ]
 
 async def reminder_loop(bot: Bot):
-    # Optional subscription only. One quiet reminder at 10:00 Africa/Cairo.
+    # Opt-in only; at most one message per subscribed user per Cairo calendar day.
     while True:
         now = datetime.now(ZoneInfo("Africa/Cairo"))
+        day = now.date().isoformat()
         if now.hour == 10 and now.minute < 5:
             for user_id in db.reminder_users():
+                if db.reminder_sent_today(user_id, day):
+                    continue
                 try:
                     await bot.send_message(user_id, MESSAGES[now.timetuple().tm_yday % len(MESSAGES)])
+                    db.mark_reminder_sent(user_id, day)
                 except Exception:
+                    # Do not mark failed deliveries; user may have blocked the bot.
                     pass
             await asyncio.sleep(300)
         await asyncio.sleep(30)
