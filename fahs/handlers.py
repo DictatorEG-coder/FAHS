@@ -147,13 +147,17 @@ async def send_scan(message: Message, raw: str) -> bool:
     reasons = "\n".join("• " + escape(x) for x in result["reasons"])
     host = escape(result.get("host") or "غير متاح")
     source = escape(result.get("source") or "تحليل محلي")
+    checked_sources = "، ".join(escape(x) for x in result.get("sources_checked", [])) or "لا توجد مصادر خارجية مفعّلة"
+    unavailable_sources = "، ".join(escape(x) for x in result.get("sources_unavailable", []))
     checked_at = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d %H:%M")
     redirects = max(0, len(result.get("chain", [])) - 1)
     text = (f"<b>نتيجة فحص فَحْص</b>\n"
             f"التصنيف: <b>{result['level']}</b>\n"
             f"النطاق: <code>{host}</code>\n"
             f"مصدر المطابقة: <code>{source}</code>\n"
-            f"وقت الفحص: <code>{checked_at}</code>\n"
+            f"مصادر السمعة المتاحة: <code>{checked_sources}</code>\n"
+            + (f"مصادر تعذر الوصول إليها: <code>{unavailable_sources}</code>\\n" if unavailable_sources else "")
+            + f"وقت الفحص: <code>{checked_at}</code>\n"
             f"التحويلات المرصودة: <code>{redirects}</code>\n\n"
             f"<b>المؤشرات:</b>\n{reasons}\n\n"
             "<i>هذه قراءة أولية للمؤشرات وليست ضمانًا للأمان أو حكمًا قاطعًا. لا تُدخل بياناتك في موقع لم تتحقق منه.</i>")
