@@ -335,17 +335,17 @@ async def scan_prompt(call: CallbackQuery):
 @router.callback_query(F.data == "group_help")
 async def group_help(call: CallbackQuery):
     body = (
-        "<b>حماية مجموعات تيليجرام</b>\\n"
-        "أضف فَحْص إلى المجموعة، ثم امنحه صلاحية رؤية الرسائل. يلزم أن يكون مشرفًا لحذف الرسائل.\\n\\n"
-        "<b>أوامر المشرفين:</b>\\n"
-        "• <code>/fahs_on</code> تفعيل فحص الروابط.\\n"
-        "• <code>/fahs_off</code> إيقاف الفحص.\\n"
-        "• <code>/fahs_status</code> عرض حالة الحماية.\\n"
-        "• <code>/fahs_delete_on</code> تفعيل حذف الروابط ذات الخطورة المرتفعة أو الحرجة.\\n"
-        "• <code>/fahs_delete_off</code> إيقاف الحذف التلقائي.\\n"
-        "• <code>/fahs_allow example.com</code> استثناء نطاق موثوق.\\n"
-        "• <code>/fahs_unallow example.com</code> إزالة الاستثناء.\\n"
-        "• <code>/fahs_allowlist</code> عرض النطاقات المستثناة.\\n\\n"
+        "<b>حماية مجموعات تيليجرام</b>\n"
+        "أضف فَحْص إلى المجموعة، ثم امنحه صلاحية رؤية الرسائل. يلزم أن يكون مشرفًا لحذف الرسائل.\n\n"
+        "<b>أوامر المشرفين:</b>\n"
+        "• <code>/fahs_on</code> تفعيل فحص الروابط.\n"
+        "• <code>/fahs_off</code> إيقاف الفحص.\n"
+        "• <code>/fahs_status</code> عرض حالة الحماية.\n"
+        "• <code>/fahs_delete_on</code> تفعيل حذف الروابط ذات الخطورة المرتفعة أو الحرجة.\n"
+        "• <code>/fahs_delete_off</code> إيقاف الحذف التلقائي.\n"
+        "• <code>/fahs_allow example.com</code> استثناء نطاق موثوق.\n"
+        "• <code>/fahs_unallow example.com</code> إزالة الاستثناء.\n"
+        "• <code>/fahs_allowlist</code> عرض النطاقات المستثناة.\n\n"
         "<b>تنبيه:</b> الحذف التلقائي قد يتأثر بنتيجة اشتباه خاطئة؛ ابدأ بالفحص دون حذف، ولا تستثنِ نطاقًا إلا بعد التحقق منه."
     )
     await call.message.edit_text(body, reply_markup=back_menu())
