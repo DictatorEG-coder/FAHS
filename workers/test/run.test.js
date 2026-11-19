@@ -35,7 +35,7 @@ const reset = () => (calls.length = 0);
 
 const { handleUpdate } = await import("../src/index.js");
 const { processBroadcasts } = await import("../src/admin.js");
-const env = { DB: makeD1(), BOT_TOKEN: "T", OWNER_ID: "1", WEBHOOK_SECRET: "s", VT_API_KEY: "k", BROADCAST_BATCH: "25" };
+const env = { DB: makeD1(), BOT_TOKEN: "T", OWNER_ID: "1", ADMIN_IDS: "2,3", WEBHOOK_SECRET: "s", VT_API_KEY: "k", BROADCAST_BATCH: "25" };
 const ctx = { waitUntil: (p) => p };
 const msg = (from, text, extra = {}) => ({ update_id: 1, message: { message_id: ++msgId, chat: { id: from, type: "private" }, from: { id: from, is_bot: false }, text, ...extra } });
 const cbq = (from, data) => ({ update_id: 2, callback_query: { id: "c" + Math.random(), from: { id: from }, data, message: { message_id: 5, chat: { id: from, type: "private" }, text: "x" } } });
@@ -67,6 +67,10 @@ await t("/start: يزرع المحتوى ويعرض القائمة", async () =>
   const c = last("sendMessage"); const tx = kbTexts(c);
   assert.ok(tx.includes("🔍 فحص رابط") && tx.includes("🛡 كيف أحمي نفسي") && tx.includes("📚 مصطلحات مهمة"), tx.join("|"));
   assert.ok(!tx.includes("⚙️ لوحة الإدارة"), "المستخدم العادي لا يرى لوحة الإدارة");
+});
+await t("المشرف الإضافي يرى لوحة الإدارة", async () => {
+  reset(); await handleUpdate(env, ctx, msg(2, "/start"));
+  assert.ok(kbTexts(last("sendMessage")).includes("⚙️ لوحة الإدارة"));
 });
 await t("المالك يرى زر لوحة الإدارة", async () => {
   reset(); await handleUpdate(env, ctx, msg(1, "/start"));
@@ -162,6 +166,12 @@ await t("حماية المجموعات: التفعيل والفحص والإيق
   assert.ok(last("editMessageText")?.body.text.includes("خطير"));
   reset(); await handleUpdate(env, ctx, groupMessage(50, "/fahs_off"));
   assert.ok(last("sendMessage").body.text.includes("إيقاف"));
+});
+await t("حذف بيانات المستخدم", async () => {
+  reset(); await handleUpdate(env, ctx, msg(77, "/delete_my_data"));
+  const { first } = await import("../src/db.js");
+  assert.equal(await first(env, "SELECT id FROM users WHERE id=77"), null);
+  assert.ok(last("sendMessage").body.text.includes("حُذفت بيانات حسابك"));
 });
 await t("الإحصائيات والإعدادات", async () => {
   reset(); await handleUpdate(env, ctx, cbq(1, "a:st")); const s = last("editMessageText").body.text; assert.ok(s.includes("إحصائيات") && /عمليات الفحص: <b>[1-9]/.test(s), s);
