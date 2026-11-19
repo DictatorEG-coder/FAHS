@@ -46,7 +46,7 @@ class RedirectSecurityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(connect.await_args.kwargs["host"], "93.184.216.34")
         self.assertEqual(connect.await_args.kwargs["server_hostname"], "example.com")
         self.assertTrue(writer.closed)
-        self.assertTrue(writer.data.startswith(b"HEAD / HTTP/1.1\\r\\n"))
+        self.assertTrue(writer.data.startswith(b"HEAD / HTTP/1.1\r\n"))
 
     async def test_sensitive_query_stops_before_network_connection(self):
         with (
@@ -61,9 +61,9 @@ class RedirectSecurityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rejects_credentials_in_redirect_location(self):
         reader = FakeReader([
-            b"HTTP/1.1 302 Found\\r\\n",
-            b"Location: https://user:pass@evil.example/\\r\\n",
-            b"\\r\\n",
+            b"HTTP/1.1 302 Found\r\n",
+            b"Location: https://user:pass@evil.example/\r\n",
+            b"\r\n",
         ])
         writer = FakeWriter()
         with (
