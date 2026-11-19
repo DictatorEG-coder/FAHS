@@ -72,6 +72,8 @@ def _allowlist_domain_arg(message: Message) -> str | None:
     try:
         domain = value.encode("idna").decode("ascii")
         ipaddress.ip_address(domain)
+    except UnicodeError:
+        return None
     except ValueError:
         pass
     else:
