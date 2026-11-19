@@ -292,16 +292,264 @@ async def delete_my_data(message: Message):
         db.delete_user(message.from_user.id)
         await message.answer("حُذفت إعداداتك ومعرّفك من قاعدة بيانات فَحْص. لا يشمل ذلك سجل رسائل تيليجرام أو بيانات تحتفظ بها المنصة.")
 
+def _admin_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📝 إدارة المحتوى", callback_data="admin_content")],
+        [InlineKeyboardButton(text="📣 إذاعة رسالة", callback_data="admin_broadcast")],
+    ])
+
+
+def _is_admin(user_id: int | None) -> bool:
+    return bool(user_id and user_id in settings.admin_ids)
+
+
 @router.message(Command("admin"))
 async def admin_stats(message: Message):
-    if not message.from_user or message.from_user.id not in settings.admin_ids:
+    if not message.from_user or not _is_admin(message.from_user.id):
         return
     users, reminders, groups, scans, levels = db.stats()
     level_lines = "\n".join(f"• {escape(level)}: {count}" for level, count in sorted(levels.items()))
     await message.answer(
         f"<b>لوحة فَحْص</b>\nالمستخدمون المسجلون: {users}\n"
         f"المشتركون في التذكير: {reminders}\nالمجموعات المفعّل بها الفحص: {groups}\n"
-        f"إجمالي الفحوصات: {scans}\n<b>توزيع النتائج:</b>\n{level_lines or 'لا توجد فحوصات بعد'}")
+        f"إجمالي الفحوصات: {scans}\n<b>توزيع النتائج:</b>\n{level_lines or 'لا توجد فحوصات بعد'}",
+        reply_markup=_admin_keyboard())
+
+
+ADMIN_STATES = {}
+PENDING_BROADCASTS = {}
+
+
+def _admin_category_keyboard():
+    rows = [[InlineKeyboardButton(text=label, callback_data=f"admin_cat:{key}")]
+            for key, label in CONTENT_CATEGORIES.items()]
+    rows.append([InlineKeyboardButton(text="⬅️ لوحة الإدارة", callback_data="admin_panel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _admin_items_keyboard(category: str, items):
+    rows = [[InlineKeyboardButton(text=f"{i + 1}. {item[1][:42]}", callback_data=f"admin_pick:{category}:{i}")]
+            for i, item in enumerate(items)]
+    rows.append([InlineKeyboardButton(text="➕ إضافة محتوى", callback_data=f"admin_add:{category}")])
+    rows.append([InlineKeyboardButton(text="⬅️ الأقسام", callback_data="admin_content")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data == "admin_panel")
+async def admin_panel(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    await call.message.edit_text("<b>لوحة إدارة فَحْص</b>\nاختر العملية:", reply_markup=_admin_keyboard())
+    await call.answer()
+
+
+@router.callback_query(F.data == "admin_content")
+async def admin_content(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    await call.message.edit_text("<b>إدارة المحتوى</b>\nاختر القسم الذي تريد تحديثه:", reply_markup=_admin_category_keyboard())
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("admin_cat:"))
+async def admin_content_category(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    category = call.data.split(":", 1)[1]
+    if category not in CONTENT_CATEGORIES:
+        await call.answer("قسم غير معروف.", show_alert=True)
+        return
+    items = _catalog_items(category)
+    await call.message.edit_text(
+        f"<b>{escape(CONTENT_CATEGORIES[category])}</b>\nعدد العناصر: {len(items)}\nاختر عنصرًا لتعديله أو حذفه:",
+        reply_markup=_admin_items_keyboard(category, items))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("admin_pick:"))
+async def admin_content_pick(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    try:
+        _, category, raw_index = call.data.split(":")
+        item = _catalog_items(category)[int(raw_index)]
+    except (ValueError, IndexError):
+        await call.answer("العنصر غير متاح.", show_alert=True)
+        return
+    key, title, body = item
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ تعديل", callback_data=f"admin_edit:{category}:{raw_index}")],
+        [InlineKeyboardButton(text="🗑️ حذف", callback_data=f"admin_del:{category}:{raw_index}")],
+        [InlineKeyboardButton(text="⬅️ رجوع", callback_data=f"admin_cat:{category}")],
+    ])
+    preview = body[:2600] + ("…" if len(body) > 2600 else "")
+    await call.message.edit_text(f"<b>{escape(title)}</b>\n\n{escape(preview)}", reply_markup=keyboard)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("admin_add:"))
+async def admin_content_add(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    category = call.data.split(":", 1)[1]
+    if category not in CONTENT_CATEGORIES:
+        await call.answer("قسم غير معروف.", show_alert=True)
+        return
+    ADMIN_STATES[call.from_user.id] = {"mode": "content_add", "category": category}
+    await call.message.answer(
+        "أرسل المحتوى في رسالة واحدة بهذا التنسيق:\n"
+        "<code>العنوان في السطر الأول\nثم اكتب الشرح كاملًا في الأسطر التالية</code>\n"
+        "الحد الأقصى للعنوان 90 حرفًا وللمحتوى 3500 حرف. أرسل /cancel للإلغاء.")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("admin_edit:"))
+async def admin_content_edit(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    try:
+        _, category, raw_index = call.data.split(":")
+        key, title, body = _catalog_items(category)[int(raw_index)]
+    except (ValueError, IndexError):
+        await call.answer("العنصر غير متاح.", show_alert=True)
+        return
+    ADMIN_STATES[call.from_user.id] = {"mode": "content_edit", "category": category, "item_key": key}
+    await call.message.answer(
+        f"أرسل النسخة الجديدة من «{escape(title)}» بالتنسيق نفسه: العنوان في السطر الأول ثم المحتوى.\n"
+        "أرسل /cancel للإلغاء.")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("admin_del:"))
+async def admin_content_delete(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    try:
+        _, category, raw_index = call.data.split(":")
+        key, title, _ = _catalog_items(category)[int(raw_index)]
+    except (ValueError, IndexError):
+        await call.answer("العنصر غير متاح.", show_alert=True)
+        return
+    db.hide_content_item(category, key)
+    items = _catalog_items(category)
+    await call.message.edit_text(
+        f"حُذف «{escape(title)}» من العرض العام. يمكنك إضافة محتوى بديل في القسم.",
+        reply_markup=_admin_items_keyboard(category, items))
+    await call.answer("تم إخفاء العنصر.")
+
+
+@router.callback_query(F.data == "admin_broadcast")
+async def admin_broadcast_start(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    ADMIN_STATES[call.from_user.id] = {"mode": "broadcast"}
+    await call.message.answer(
+        "أرسل الآن الرسالة التي تريد إذاعتها. يمكنك إرسال نص أو صورة أو فيديو أو ملف أو رسالة بتنسيقها. "
+        "سأعرض معاينة أولًا ولن تُرسل إلى أحد قبل تأكيدك.\nأرسل /cancel للإلغاء.")
+    await call.answer()
+
+
+@router.message(lambda message: bool(message.from_user and message.from_user.id in ADMIN_STATES))
+async def admin_state_input(message: Message):
+    user_id = message.from_user.id
+    state = ADMIN_STATES.get(user_id)
+    if not state or message.chat.type != "private":
+        return
+    if message.text and message.text.strip() == "/cancel":
+        ADMIN_STATES.pop(user_id, None)
+        await message.answer("أُلغيت العملية.", reply_markup=_admin_keyboard())
+        return
+    if state["mode"] in {"content_add", "content_edit"}:
+        if not message.text:
+            await message.answer("أرسل المحتوى كنص، مع العنوان في السطر الأول.")
+            return
+        parts = message.text.strip().split("\n", 1)
+        title = parts[0].strip()
+        body = parts[1].strip() if len(parts) > 1 else ""
+        if not title or not body or len(title) > 90 or len(body) > 3500:
+            await message.answer("التنسيق غير صحيح. يلزم عنوان لا يتجاوز 90 حرفًا، ثم سطر جديد، ثم محتوى من 1 إلى 3500 حرف.")
+            return
+        key = state.get("item_key") or uuid.uuid4().hex
+        db.save_content_item(state["category"], key, title, body)
+        category = state["category"]
+        ADMIN_STATES.pop(user_id, None)
+        await message.answer("حُفظ المحتوى. سيظهر التحديث فورًا للمستخدمين دون تحديث محرك فحص الروابط.",
+                             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                 [InlineKeyboardButton(text="إدارة القسم", callback_data=f"admin_cat:{category}")],
+                                 [InlineKeyboardButton(text="لوحة الإدارة", callback_data="admin_panel")],
+                             ]))
+        return
+    if state["mode"] == "broadcast":
+        PENDING_BROADCASTS[user_id] = (message.chat.id, message.message_id)
+        ADMIN_STATES.pop(user_id, None)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ تأكيد الإذاعة للجميع", callback_data="broadcast_confirm")],
+            [InlineKeyboardButton(text="❌ إلغاء", callback_data="broadcast_cancel")],
+        ])
+        await message.answer("هذه معاينة للرسالة. لن يتم الإرسال إلا بعد الضغط على تأكيد.")
+        await message.copy_to(chat_id=message.chat.id)
+        await message.answer(f"عدد المستخدمين المسجلين حاليًا: {len(db.list_users())}\nهل تريد إرسال هذه الرسالة؟", reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "broadcast_cancel")
+async def broadcast_cancel(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    PENDING_BROADCASTS.pop(call.from_user.id, None)
+    await call.message.edit_text("أُلغيت الإذاعة.")
+    await call.answer()
+
+
+@router.callback_query(F.data == "broadcast_confirm")
+async def broadcast_confirm(call: CallbackQuery):
+    if not _is_admin(call.from_user.id):
+        await call.answer("غير مصرح.", show_alert=True)
+        return
+    pending = PENDING_BROADCASTS.pop(call.from_user.id, None)
+    if not pending:
+        await call.answer("لا توجد إذاعة معلقة.", show_alert=True)
+        return
+    source_chat, source_message = pending
+    recipients = db.list_users()
+    sent = failed = 0
+    status = await call.message.edit_text(f"بدأت الإذاعة إلى {len(recipients)} مستخدم...")
+    for user_id in recipients:
+        try:
+            await call.bot.copy_message(chat_id=user_id, from_chat_id=source_chat, message_id=source_message)
+            sent += 1
+        except Exception as exc:
+            retry_after = getattr(exc, "retry_after", None)
+            if retry_after:
+                await asyncio.sleep(min(float(retry_after) + 1, 60))
+                try:
+                    await call.bot.copy_message(chat_id=user_id, from_chat_id=source_chat, message_id=source_message)
+                    sent += 1
+                except Exception:
+                    failed += 1
+            else:
+                failed += 1
+        await asyncio.sleep(0.05)
+    await status.edit_text(
+        f"<b>انتهت الإذاعة</b>\nإجمالي المستلمين: {len(recipients)}\n"
+        f"نجح الإرسال: {sent}\nتعذر الإرسال: {failed}")
+    await call.answer("اكتملت الإذاعة.")
+
+
+@router.message(Command("cancel"))
+async def admin_cancel_command(message: Message):
+    if message.from_user and _is_admin(message.from_user.id):
+        ADMIN_STATES.pop(message.from_user.id, None)
+        await message.answer("أُلغيت العملية.", reply_markup=_admin_keyboard())
+
 
 @router.message(F.text | F.caption)
 async def text_router(message: Message):
