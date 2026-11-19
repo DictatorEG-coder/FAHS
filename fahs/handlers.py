@@ -38,7 +38,7 @@ async def my_id(message: Message):
     if message.chat.type != "private" or not message.from_user:
         await message.reply("استخدم هذا الأمر في المحادثة الخاصة مع فَحْص.")
         return
-    await message.answer(f"معرّف تيليجرام الخاص بك: <code>{message.from_user.id}</code>\\nاستخدمه في متغير ADMIN_IDS إذا كنت مشغّل البوت.")
+    await message.answer(f"معرّف تيليجرام الخاص بك: <code>{message.from_user.id}</code>\nاستخدمه في متغير ADMIN_IDS إذا كنت مشغّل البوت.")
 
 
 @router.message(Command("help"))
