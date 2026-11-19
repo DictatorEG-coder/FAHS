@@ -48,6 +48,12 @@ class ScannerUnitTests(unittest.TestCase):
     def test_detects_verification_code(self):
         self.assertTrue(_has_sensitive_query("https://example.com/?verificationCode=123456"))
 
+    def test_detects_jwt_query_parameter(self):
+        self.assertTrue(_has_sensitive_query("https://example.com/?jwt=eyJhbGciOiJIUzI1NiJ9"))
+
+    def test_detects_cookie_query_parameter(self):
+        self.assertTrue(_has_sensitive_query("https://example.com/?sessionCookie=secret"))
+
     def test_normalises_ipv6_authority(self):
         self.assertEqual(_normalise("https://[2606:4700:4700::1111]"),
                          "https://[2606:4700:4700::1111]/")
