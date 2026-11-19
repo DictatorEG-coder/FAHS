@@ -1,5 +1,5 @@
 import unittest
-from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query
+from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike
 
 class ScannerUnitTests(unittest.TestCase):
     def test_adds_https_scheme(self):
@@ -22,6 +22,15 @@ class ScannerUnitTests(unittest.TestCase):
     def test_normalises_ipv6_authority(self):
         self.assertEqual(_normalise("https://[2606:4700:4700::1111]"),
                          "https://[2606:4700:4700::1111]/")
+
+    def test_detects_brand_typo(self):
+        self.assertEqual(_brand_lookalike("paypa1.com"), "paypal")
+
+    def test_detects_brand_domain_nested_under_attacker_domain(self):
+        self.assertEqual(_brand_lookalike("paypal.com.evil.example"), "paypal")
+
+    def test_allows_official_brand_subdomain(self):
+        self.assertIsNone(_brand_lookalike("login.paypal.com"))
 
     def test_rejects_loopback_address(self):
         with self.assertRaises(ValueError):
