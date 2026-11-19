@@ -168,13 +168,17 @@ async def _scan_url(raw: str) -> dict:
         reasons.append(redirect_note)
         if any(term in redirect_note for term in ("غير عام", "خاصة", "محلية", "تجاوز")):
             score = max(score, 4)
+    if any(step in feed_entries for step in chain):
+        return {"level": "خطر حرج", "score": 10,
+                "reasons": ["تطابقت إحدى وجهات التحويل مع مؤشر وارد في مصدر OpenPhish المفعّل."],
+                "url": url, "host": host, "ips": addresses, "chain": chain, "source": "OpenPhish"}
     if len(chain) > 1:
         score += 1
         reasons.append(f"رُصدت {len(chain)-1} عملية تحويل")
     if redirect_note and "تجاوز" in redirect_note:
         score += 2
 
-    if redirect_note and score == 0:
+    if redirect_note and not any(term in redirect_note for term in ("غير عام", "خاصة", "محلية", "تجاوز")):
         level = "تعذر إكمال الفحص"
     elif score >= 4:
         level = "مرتفع"
