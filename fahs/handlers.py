@@ -1,4 +1,5 @@
 import re
+from html import escape
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -68,8 +69,8 @@ async def send_scan(message: Message, raw: str) -> bool:
         return False
     events.append(now)
     result = await scan_url(raw)
-    reasons = "\n".join("• " + x for x in result["reasons"])
-    host = result.get("host") or "غير متاح"
+    reasons = "\n".join("• " + escape(x) for x in result["reasons"])
+    host = escape(result.get("host") or "غير متاح")
     checked_at = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d %H:%M")
     redirects = max(0, len(result.get("chain", [])) - 1)
     text = (f"<b>نتيجة فحص فَحْص</b>\n"
@@ -84,7 +85,7 @@ async def send_scan(message: Message, raw: str) -> bool:
         if enabled and auto_delete and message.text is not None and result["level"] in {"خطر حرج", "مرتفع"}:
             try:
                 await message.delete()
-                await message.answer("🛑 <b>حُذف رابط يحمل مؤشرات خطورة مرتفعة.</b>\\n" + text, disable_web_page_preview=True)
+                await message.answer("🛑 <b>حُذف رابط يحمل مؤشرات خطورة مرتفعة.</b>\n" + text, disable_web_page_preview=True)
                 return True
             except Exception:
                 await message.reply("🛑 رُصد رابط عالي الخطورة، لكن تعذر حذف الرسالة. راجع صلاحيات البوت.", disable_web_page_preview=True)
@@ -130,7 +131,8 @@ async def delete_my_data(message: Message):
     if message.from_user:
         db.delete_user(message.from_user.id)
         await message.answer("حُذفت إعداداتك ومعرّفك من قاعدة بيانات فَحْص. لا يشمل ذلك سجل رسائل تيليجرام أو بيانات تحتفظ بها المنصة.")
-\n@router.message(Command("admin"))
+
+@router.message(Command("admin"))
 async def admin_stats(message: Message):
     if not message.from_user or message.from_user.id not in settings.admin_ids:
         return
@@ -169,18 +171,18 @@ async def scan_prompt(call: CallbackQuery):
 
 @router.callback_query(F.data == "protect")
 async def protect(call: CallbackQuery):
-    text = ("<b>قواعد الحماية الأساسية</b>\\n"
-    "1. استخدم كلمة مرور فريدة وطويلة لكل حساب، واحفظها في مدير موثوق.\\n"
-    "2. فعّل المصادقة الثنائية، ويفضل تطبيق مصادقة أو مفتاح أمان حيث يتاح.\\n"
-    "3. لا تشارك OTP أو رموز الاسترداد مع أي شخص.\\n"
-    "4. افتح المواقع من التطبيق الرسمي أو اكتب العنوان بنفسك، ولا تثق بالشعار وحده.\\n"
-    "5. راجع جلسات تيليجرام والبريد والحسابات المهمة، وأنهِ الجلسات غير المعروفة.\\n"
-    "6. أمّن بريدك الإلكتروني؛ فهو غالبًا مفتاح استعادة بقية الحسابات.\\n"
-    "7. فعّل تنبيهات العمليات البنكية، واتصل بالبنك عبر رقمه الرسمي عند الشك.\\n"
-    "8. حدّث الهاتف والكمبيوتر والتطبيقات، وثبّت البرامج من المتاجر والمواقع الرسمية.\\n"
-    "9. لا تمنح صلاحيات إمكانية الوصول أو إدارة الجهاز لتطبيق غير موثوق.\\n"
-    "10. استخدم قفل شاشة قويًا، ونسخًا احتياطية دورية، وشبكة Wi-Fi محمية.\\n"
-    "11. لا تمسح QR أو تفتح رابطًا مختصرًا قبل رؤية الوجهة والتحقق منها.\\n"
+    text = ("<b>قواعد الحماية الأساسية</b>\n"
+    "1. استخدم كلمة مرور فريدة وطويلة لكل حساب، واحفظها في مدير موثوق.\n"
+    "2. فعّل المصادقة الثنائية، ويفضل تطبيق مصادقة أو مفتاح أمان حيث يتاح.\n"
+    "3. لا تشارك OTP أو رموز الاسترداد مع أي شخص.\n"
+    "4. افتح المواقع من التطبيق الرسمي أو اكتب العنوان بنفسك، ولا تثق بالشعار وحده.\n"
+    "5. راجع جلسات تيليجرام والبريد والحسابات المهمة، وأنهِ الجلسات غير المعروفة.\n"
+    "6. أمّن بريدك الإلكتروني؛ فهو غالبًا مفتاح استعادة بقية الحسابات.\n"
+    "7. فعّل تنبيهات العمليات البنكية، واتصل بالبنك عبر رقمه الرسمي عند الشك.\n"
+    "8. حدّث الهاتف والكمبيوتر والتطبيقات، وثبّت البرامج من المتاجر والمواقع الرسمية.\n"
+    "9. لا تمنح صلاحيات إمكانية الوصول أو إدارة الجهاز لتطبيق غير موثوق.\n"
+    "10. استخدم قفل شاشة قويًا، ونسخًا احتياطية دورية، وشبكة Wi-Fi محمية.\n"
+    "11. لا تمسح QR أو تفتح رابطًا مختصرًا قبل رؤية الوجهة والتحقق منها.\n"
     "12. علّم الأطفال ألا يشاركوا الموقع أو الصور أو رموز التحقق مع الغرباء.")
     await call.message.edit_text(text, reply_markup=back_menu())
     await call.answer()
