@@ -22,6 +22,9 @@ async def main():
         BotCommand(command="fahs_off", description="إيقاف فحص روابط المجموعة للمشرفين"),
         BotCommand(command="fahs_delete_on", description="تفعيل حذف الروابط عالية الخطورة"),
         BotCommand(command="fahs_delete_off", description="إيقاف الحذف التلقائي"),
+        BotCommand(command="fahs_allow", description="استثناء نطاق في المجموعة"),
+        BotCommand(command="fahs_unallow", description="إزالة استثناء نطاق"),
+        BotCommand(command="fahs_allowlist", description="عرض نطاقات الاستثناء"),
         BotCommand(command="admin", description="إحصاءات المشغّل"),
         BotCommand(command="delete_my_data", description="حذف بياناتك من قاعدة البوت"),
     ])

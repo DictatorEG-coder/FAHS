@@ -1,4 +1,6 @@
 import asyncio
+import logging
+from aiogram.exceptions import TelegramForbiddenError
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from aiogram import Bot
@@ -17,13 +19,16 @@ async def reminder_loop(bot: Bot):
         day = now.date().isoformat()
         if now.hour == 10 and now.minute < 5:
             for user_id in db.reminder_users():
-                if not db.reminder_due(user_id, day):
+                if not db.get_reminders(user_id) or not db.reminder_due(user_id, day):
                     continue
                 try:
                     await bot.send_message(user_id, MESSAGES[now.timetuple().tm_yday % len(MESSAGES)])
                     db.mark_reminder_sent(user_id, day)
+                except TelegramForbiddenError:
+                    db.set_reminders(user_id, False)
                 except Exception:
-                    # Do not mark failed deliveries; user may have blocked the bot.
-                    pass
+                    logging.exception("Failed to deliver an opted-in reminder")
+                    db.mark_reminder_sent(user_id, day)
+                await asyncio.sleep(0.1)
             await asyncio.sleep(300)
         await asyncio.sleep(30)

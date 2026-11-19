@@ -1,4 +1,7 @@
 import re
+from html import escape
+import ipaddress
+from urllib.parse import urlsplit
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -13,7 +16,7 @@ from fahs.scanner import scan_url
 from fahs.config import settings
 
 router = Router()
-URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?:/[^\s<>]*)?)")
+URL_RE = re.compile(r"(?i)(?:(?:https?://|www\.)[^\s<>]+|(?<![@a-z0-9._-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:/[^\s<>]*)?|(?<![0-9.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?:/[^\s<>]*)?)")
 SCAN_EVENTS = defaultdict(deque)
 
 TIP_TEXT = "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ\n\nاللهم صلِّ وسلم على نبينا محمد."
@@ -36,7 +39,7 @@ async def help_cmd(message: Message):
 
 @router.message(Command("fahs_on"))
 async def group_on(message: Message):
-    if message.chat.type not in {"group", "supergroup"}:
+    if message.chat.type not in {"group", "supergroup"} or not message.from_user:
         return
     member = await message.chat.get_member(message.from_user.id)
     if member.status not in {"administrator", "creator"}:
@@ -46,9 +49,82 @@ async def group_on(message: Message):
     db.set_group(message.chat.id, True, auto_delete)
     await message.reply("تم تفعيل فحص الروابط التي تصل إلى البوت. يعتمد الرصد على رسائل تيليجرام التي يسمح إعداد الخصوصية والصلاحيات للبوت برؤيتها.")
 
+
+def _group_admin(message: Message) -> bool:
+    return bool(message.from_user and message.chat.type in {"group", "supergroup"})
+
+async def _require_group_admin(message: Message) -> bool:
+    if not _group_admin(message):
+        return False
+    member = await message.chat.get_member(message.from_user.id)
+    if member.status not in {"administrator", "creator"}:
+        await message.reply("هذا الأمر متاح لمشرفي المجموعة فقط.")
+        return False
+    return True
+
+def _allowlist_domain_arg(message: Message) -> str | None:
+    raw = (message.text or "").split(maxsplit=1)
+    if len(raw) != 2:
+        return None
+    value = raw[1].strip().lower().rstrip(".")
+    if "://" in value or any(ch in value for ch in "/\\@?#:") or "*" in value:
+        return None
+    try:
+        domain = value.encode("idna").decode("ascii")
+        ipaddress.ip_address(domain)
+    except UnicodeError:
+        return None
+    except ValueError:
+        pass
+    else:
+        return None
+    labels = domain.split(".")
+    if len(domain) > 253 or len(labels) < 2:
+        return None
+    if any(not re.fullmatch(r"(?!-)[a-z0-9-]{1,63}(?<!-)", label) for label in labels):
+        return None
+    return domain
+
+@router.message(Command("fahs_allow"))
+async def group_allow(message: Message):
+    if not await _require_group_admin(message):
+        return
+    domain = _allowlist_domain_arg(message)
+    if not domain:
+        await message.reply("استخدم الأمر هكذا: /fahs_allow example.com — اكتب اسم نطاق فقط دون رابط أو مسار.")
+        return
+    if not db.add_group_domain(message.chat.id, domain):
+        await message.reply("وصلت المجموعة إلى الحد الأقصى وهو 100 نطاق.")
+        return
+    await message.reply(f"أُضيف <code>{escape(domain)}</code> إلى قائمة الاستثناءات. ستُتجاوز روابط هذا النطاق ونطاقاته الفرعية في فحص المجموعة.")
+
+@router.message(Command("fahs_unallow"))
+async def group_unallow(message: Message):
+    if not await _require_group_admin(message):
+        return
+    domain = _allowlist_domain_arg(message)
+    if not domain:
+        await message.reply("استخدم الأمر هكذا: /fahs_unallow example.com")
+        return
+    removed = db.remove_group_domain(message.chat.id, domain)
+    await message.reply("حُذف النطاق من قائمة الاستثناءات." if removed else "هذا النطاق غير موجود في قائمة الاستثناءات.")
+
+@router.message(Command("fahs_allowlist"))
+async def group_allowlist(message: Message):
+    if not await _require_group_admin(message):
+        return
+    domains = db.list_group_domains(message.chat.id)
+    if not domains:
+        await message.reply("قائمة الاستثناءات فارغة.")
+        return
+    for offset in range(0, len(domains), 12):
+        body = "\n".join(f"• <code>{escape(domain)}</code>" for domain in domains[offset:offset + 12])
+        title = "<b>النطاقات المستثناة في هذه المجموعة</b>\n" if offset == 0 else ""
+        await message.reply(title + body)
+
 @router.message(Command("fahs_off"))
 async def group_off(message: Message):
-    if message.chat.type not in {"group", "supergroup"}:
+    if message.chat.type not in {"group", "supergroup"} or not message.from_user:
         return
     member = await message.chat.get_member(message.from_user.id)
     if member.status not in {"administrator", "creator"}:
@@ -68,14 +144,20 @@ async def send_scan(message: Message, raw: str) -> bool:
         return False
     events.append(now)
     result = await scan_url(raw)
-    reasons = "\n".join("• " + x for x in result["reasons"])
-    host = result.get("host") or "غير متاح"
+    reasons = "\n".join("• " + escape(x) for x in result["reasons"])
+    host = escape(result.get("host") or "غير متاح")
+    source = escape(result.get("source") or "تحليل محلي")
+    checked_sources = "، ".join(escape(x) for x in result.get("sources_checked", [])) or "لا توجد مصادر خارجية مفعّلة"
+    unavailable_sources = "، ".join(escape(x) for x in result.get("sources_unavailable", []))
     checked_at = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d %H:%M")
     redirects = max(0, len(result.get("chain", [])) - 1)
     text = (f"<b>نتيجة فحص فَحْص</b>\n"
             f"التصنيف: <b>{result['level']}</b>\n"
             f"النطاق: <code>{host}</code>\n"
-            f"وقت الفحص: <code>{checked_at}</code>\n"
+            f"مصدر المطابقة: <code>{source}</code>\n"
+            f"مصادر السمعة المتاحة: <code>{checked_sources}</code>\n"
+            + (f"مصادر تعذر الوصول إليها: <code>{unavailable_sources}</code>\\n" if unavailable_sources else "")
+            + f"وقت الفحص: <code>{checked_at}</code>\n"
             f"التحويلات المرصودة: <code>{redirects}</code>\n\n"
             f"<b>المؤشرات:</b>\n{reasons}\n\n"
             "<i>هذه قراءة أولية للمؤشرات وليست ضمانًا للأمان أو حكمًا قاطعًا. لا تُدخل بياناتك في موقع لم تتحقق منه.</i>")
@@ -84,7 +166,7 @@ async def send_scan(message: Message, raw: str) -> bool:
         if enabled and auto_delete and message.text is not None and result["level"] in {"خطر حرج", "مرتفع"}:
             try:
                 await message.delete()
-                await message.answer("🛑 <b>حُذف رابط يحمل مؤشرات خطورة مرتفعة.</b>\\n" + text, disable_web_page_preview=True)
+                await message.answer("🛑 <b>حُذف رابط يحمل مؤشرات خطورة مرتفعة.</b>\n" + text, disable_web_page_preview=True)
                 return True
             except Exception:
                 await message.reply("🛑 رُصد رابط عالي الخطورة، لكن تعذر حذف الرسالة. راجع صلاحيات البوت.", disable_web_page_preview=True)
@@ -130,7 +212,8 @@ async def delete_my_data(message: Message):
     if message.from_user:
         db.delete_user(message.from_user.id)
         await message.answer("حُذفت إعداداتك ومعرّفك من قاعدة بيانات فَحْص. لا يشمل ذلك سجل رسائل تيليجرام أو بيانات تحتفظ بها المنصة.")
-\n@router.message(Command("admin"))
+
+@router.message(Command("admin"))
 async def admin_stats(message: Message):
     if not message.from_user or message.from_user.id not in settings.admin_ids:
         return
@@ -153,6 +236,14 @@ async def text_router(message: Message):
         return
     for match in matches[:3]:
         raw = match.rstrip(".,،؛!؟)]}")
+        if message.chat.type in {"group", "supergroup"}:
+            try:
+                host = urlsplit(raw if "://" in raw else "https://" + raw).hostname or ""
+                host = host.encode("idna").decode("ascii").lower().rstrip(".")
+            except (ValueError, UnicodeError):
+                host = ""
+            if host and db.group_domain_allowed(message.chat.id, host):
+                continue
         deleted = await send_scan(message, raw)
         if deleted:
             break
@@ -169,18 +260,18 @@ async def scan_prompt(call: CallbackQuery):
 
 @router.callback_query(F.data == "protect")
 async def protect(call: CallbackQuery):
-    text = ("<b>قواعد الحماية الأساسية</b>\\n"
-    "1. استخدم كلمة مرور فريدة وطويلة لكل حساب، واحفظها في مدير موثوق.\\n"
-    "2. فعّل المصادقة الثنائية، ويفضل تطبيق مصادقة أو مفتاح أمان حيث يتاح.\\n"
-    "3. لا تشارك OTP أو رموز الاسترداد مع أي شخص.\\n"
-    "4. افتح المواقع من التطبيق الرسمي أو اكتب العنوان بنفسك، ولا تثق بالشعار وحده.\\n"
-    "5. راجع جلسات تيليجرام والبريد والحسابات المهمة، وأنهِ الجلسات غير المعروفة.\\n"
-    "6. أمّن بريدك الإلكتروني؛ فهو غالبًا مفتاح استعادة بقية الحسابات.\\n"
-    "7. فعّل تنبيهات العمليات البنكية، واتصل بالبنك عبر رقمه الرسمي عند الشك.\\n"
-    "8. حدّث الهاتف والكمبيوتر والتطبيقات، وثبّت البرامج من المتاجر والمواقع الرسمية.\\n"
-    "9. لا تمنح صلاحيات إمكانية الوصول أو إدارة الجهاز لتطبيق غير موثوق.\\n"
-    "10. استخدم قفل شاشة قويًا، ونسخًا احتياطية دورية، وشبكة Wi-Fi محمية.\\n"
-    "11. لا تمسح QR أو تفتح رابطًا مختصرًا قبل رؤية الوجهة والتحقق منها.\\n"
+    text = ("<b>قواعد الحماية الأساسية</b>\n"
+    "1. استخدم كلمة مرور فريدة وطويلة لكل حساب، واحفظها في مدير موثوق.\n"
+    "2. فعّل المصادقة الثنائية، ويفضل تطبيق مصادقة أو مفتاح أمان حيث يتاح.\n"
+    "3. لا تشارك OTP أو رموز الاسترداد مع أي شخص.\n"
+    "4. افتح المواقع من التطبيق الرسمي أو اكتب العنوان بنفسك، ولا تثق بالشعار وحده.\n"
+    "5. راجع جلسات تيليجرام والبريد والحسابات المهمة، وأنهِ الجلسات غير المعروفة.\n"
+    "6. أمّن بريدك الإلكتروني؛ فهو غالبًا مفتاح استعادة بقية الحسابات.\n"
+    "7. فعّل تنبيهات العمليات البنكية، واتصل بالبنك عبر رقمه الرسمي عند الشك.\n"
+    "8. حدّث الهاتف والكمبيوتر والتطبيقات، وثبّت البرامج من المتاجر والمواقع الرسمية.\n"
+    "9. لا تمنح صلاحيات إمكانية الوصول أو إدارة الجهاز لتطبيق غير موثوق.\n"
+    "10. استخدم قفل شاشة قويًا، ونسخًا احتياطية دورية، وشبكة Wi-Fi محمية.\n"
+    "11. لا تمسح QR أو تفتح رابطًا مختصرًا قبل رؤية الوجهة والتحقق منها.\n"
     "12. علّم الأطفال ألا يشاركوا الموقع أو الصور أو رموز التحقق مع الغرباء.")
     await call.message.edit_text(text, reply_markup=back_menu())
     await call.answer()

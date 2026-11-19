@@ -22,6 +22,12 @@ def init_db():
             enabled INTEGER NOT NULL DEFAULT 0,
             auto_delete INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS group_allowlist (
+            chat_id INTEGER NOT NULL,
+            domain TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(chat_id, domain)
+        );
         """)
         columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
         if "last_reminder_date" not in columns:
@@ -101,3 +107,30 @@ def stats():
 def delete_user(user_id: int):
     with connect() as db:
         db.execute("DELETE FROM users WHERE user_id=?", (user_id,))
+
+def add_group_domain(chat_id: int, domain: str) -> bool:
+    with connect() as db:
+        exists = db.execute("SELECT 1 FROM group_allowlist WHERE chat_id=? AND domain=?", (chat_id, domain)).fetchone()
+        if exists:
+            return True
+        count = db.execute("SELECT COUNT(*) FROM group_allowlist WHERE chat_id=?", (chat_id,)).fetchone()[0]
+        if count >= 100:
+            return False
+        db.execute("INSERT INTO group_allowlist(chat_id,domain) VALUES(?,?)", (chat_id, domain))
+        return True
+
+def remove_group_domain(chat_id: int, domain: str) -> bool:
+    with connect() as db:
+        cur = db.execute("DELETE FROM group_allowlist WHERE chat_id=? AND domain=?", (chat_id, domain))
+        return cur.rowcount > 0
+
+def group_domain_allowed(chat_id: int, host: str) -> bool:
+    with connect() as db:
+        rows = db.execute("SELECT domain FROM group_allowlist WHERE chat_id=?", (chat_id,)).fetchall()
+        domains = [row["domain"] for row in rows]
+    return any(host == domain or host.endswith("." + domain) for domain in domains)
+
+def list_group_domains(chat_id: int) -> list[str]:
+    with connect() as db:
+        rows = db.execute("SELECT domain FROM group_allowlist WHERE chat_id=? ORDER BY domain", (chat_id,)).fetchall()
+        return [row["domain"] for row in rows]
