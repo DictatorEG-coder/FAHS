@@ -2,9 +2,9 @@ name: FAHS CI
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'stable/**']
+    branches: [main, 'stable/**', 'work/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'stable/**']
 jobs:
   checks:
     runs-on: ubuntu-latest

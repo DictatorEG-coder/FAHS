@@ -1,7 +1,7 @@
 import unittest
 import socket
 from unittest.mock import patch
-from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike, _parse_urlhaus_entries
+from fahs.scanner import _normalise, _resolve_public, _has_sensitive_query, _brand_lookalike, _parse_urlhaus_entries, _scan_url, scan_url, _read_head_response
 
 class ScannerUnitTests(unittest.TestCase):
     def test_adds_https_scheme(self):
@@ -118,6 +118,64 @@ class ScannerUnitTests(unittest.TestCase):
     def test_ipv6_loopback_is_rejected(self):
         with self.assertRaises(ValueError):
             _resolve_public("::1")
+
+
+
+class SensitiveURLShortCircuitTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sensitive_query_stops_before_feed_or_dns_calls(self):
+        from unittest.mock import AsyncMock
+        with patch("fahs.scanner._openphish_entries", new=AsyncMock(side_effect=AssertionError("feed should not run"))), \
+             patch("fahs.scanner._urlhaus_entries", new=AsyncMock(side_effect=AssertionError("feed should not run"))), \
+             patch("fahs.scanner._resolve_public", side_effect=AssertionError("DNS should not run")):
+            result = await _scan_url("https://example.com/login?access_token=secret")
+        self.assertEqual(result["level"], "تعذر إكمال الفحص")
+        self.assertEqual(result["host"], "example.com")
+        self.assertEqual(result["chain"], [])
+        self.assertIn("قبل استعلام DNS", result["reasons"][0])
+
+
+
+class ScannerFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unexpected_internal_error_returns_safe_result_without_logging_secret(self):
+        with patch("fahs.scanner._scan_url", side_effect=RuntimeError("secret=do-not-log")):
+            with self.assertLogs("fahs.scanner", level="ERROR") as captured:
+                result = await scan_url("https://example.com")
+        self.assertEqual(result["level"], "تعذر إكمال الفحص")
+        self.assertNotIn("secret=do-not-log", " ".join(result["reasons"]))
+        self.assertNotIn("secret=do-not-log", " ".join(captured.output))
+
+
+
+class HeadResponseParsingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_skips_informational_response_before_redirect(self):
+        class Reader:
+            def __init__(self, lines):
+                self.lines = iter(lines)
+            async def readline(self):
+                return next(self.lines, b"")
+
+        reader = Reader([
+            b"HTTP/1.1 103 Early Hints\r\n",
+            b"Link: </style.css>; rel=preload\r\n",
+            b"\r\n",
+            b"HTTP/1.1 302 Found\r\n",
+            b"Location: https://next.example/path\r\n",
+            b"\r\n",
+        ])
+        self.assertEqual(await _read_head_response(reader), (302, "https://next.example/path"))
+
+    async def test_rejects_oversized_response_headers(self):
+        class Reader:
+            def __init__(self):
+                self.first = True
+            async def readline(self):
+                if self.first:
+                    self.first = False
+                    return b"HTTP/1.1 200 OK\r\n"
+                return b"X-Large: " + (b"a" * 17000) + b"\r\n"
+
+        with self.assertRaises(ValueError):
+            await _read_head_response(Reader())
 
 if __name__ == "__main__":
     unittest.main()
