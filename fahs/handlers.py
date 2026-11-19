@@ -547,10 +547,14 @@ async def quiz_answer(call: CallbackQuery):
     result = "✅ إجابة صحيحة." if answer_index == correct else "❌ ليست الإجابة الصحيحة."
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎯 سؤال آخر", callback_data="quiz_next")],
+        [InlineKeyboardButton(text="📚 اقرأ دليل الحماية", callback_data="protect")],
         [InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")],
     ])
     await call.message.edit_text(
-        f"{result}\n\n{escape(explanation)}",
+        f"{result}\\n\\n<b>{escape(question)}</b>\\n"
+        f"إجابتك: {escape(options[answer_index])}\\n"
+        f"الإجابة الصحيحة: {escape(options[correct])}\\n\\n"
+        f"<b>التفسير:</b>\\n{escape(explanation)}",
         reply_markup=keyboard,
     )
     await call.answer()
@@ -567,11 +571,41 @@ async def privacy(call: CallbackQuery):
     await call.answer()
 
 
+GLOSSARY_PAGE_SIZE = 5
+
+async def _show_glossary_page(call: CallbackQuery, page: int):
+    entries = list(GLOSSARY.items())
+    pages = max(1, (len(entries) + GLOSSARY_PAGE_SIZE - 1) // GLOSSARY_PAGE_SIZE)
+    page = max(0, min(page, pages - 1))
+    selected = entries[page * GLOSSARY_PAGE_SIZE:(page + 1) * GLOSSARY_PAGE_SIZE]
+    body = "<b>📖 قاموس الأمن الرقمي</b>\\n\\n" + "\\n\\n".join(
+        f"<b>{escape(term)}</b>\\n{escape(meaning)}" for term, meaning in selected
+    )
+    rows = []
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️ السابق", callback_data=f"glossary_page:{page - 1}"))
+    if page + 1 < pages:
+        nav.append(InlineKeyboardButton(text="التالي ➡️", callback_data=f"glossary_page:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="⬅️ القائمة الرئيسية", callback_data="home")])
+    body += f"\\n\\n<i>صفحة {page + 1} من {pages} — {len(entries)} مصطلحًا</i>"
+    await call.message.edit_text(body, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
 @router.callback_query(F.data == "glossary")
 async def glossary(call: CallbackQuery):
-    body = "<b>قاموس الأمن الرقمي</b>\n\n" + "\n\n".join(
-        f"<b>{term}</b>\n{meaning}" for term, meaning in GLOSSARY.items())
-    await call.message.edit_text(body, reply_markup=back_menu())
+    await _show_glossary_page(call, 0)
+    await call.answer()
+
+@router.callback_query(F.data.startswith("glossary_page:"))
+async def glossary_page(call: CallbackQuery):
+    try:
+        page = int(call.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await call.answer("تعذر فتح الصفحة.", show_alert=True)
+        return
+    await _show_glossary_page(call, page)
     await call.answer()
 
 @router.callback_query(F.data == "reminder_interval_toggle")
