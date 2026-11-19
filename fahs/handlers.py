@@ -400,6 +400,9 @@ async def admin_content_add(call: CallbackQuery):
     if category not in CONTENT_CATEGORIES:
         await call.answer("قسم غير معروف.", show_alert=True)
         return
+    if len(_catalog_items(category)) >= 80:
+        await call.answer("وصل القسم إلى الحد الأقصى وهو 80 عنصرًا.", show_alert=True)
+        return
     ADMIN_STATES[call.from_user.id] = {"mode": "content_add", "category": category}
     await call.message.answer(
         "أرسل المحتوى في رسالة واحدة بهذا التنسيق:\n"
@@ -457,7 +460,7 @@ async def admin_broadcast_start(call: CallbackQuery):
     await call.answer()
 
 
-@router.message(lambda message: bool(message.from_user and message.from_user.id in ADMIN_STATES))
+@router.message(lambda message: bool(message.chat.type == "private" and message.from_user and message.from_user.id in ADMIN_STATES))
 async def admin_state_input(message: Message):
     user_id = message.from_user.id
     state = ADMIN_STATES.get(user_id)
@@ -474,8 +477,9 @@ async def admin_state_input(message: Message):
         parts = message.text.strip().split("\n", 1)
         title = parts[0].strip()
         body = parts[1].strip() if len(parts) > 1 else ""
-        if not title or not body or len(title) > 90 or len(body) > 3500:
-            await message.answer("التنسيق غير صحيح. يلزم عنوان لا يتجاوز 90 حرفًا، ثم سطر جديد، ثم محتوى من 1 إلى 3500 حرف.")
+        max_body = 500 if state["category"] == "glossary" else 3500
+        if not title or not body or len(title) > 90 or len(body) > max_body:
+            await message.answer(f"التنسيق غير صحيح. يلزم عنوان لا يتجاوز 90 حرفًا، ثم سطر جديد، ومحتوى من 1 إلى {max_body} حرف.")
             return
         key = state.get("item_key") or uuid.uuid4().hex
         db.save_content_item(state["category"], key, title, body)
@@ -519,6 +523,7 @@ async def broadcast_confirm(call: CallbackQuery):
         await call.answer("لا توجد إذاعة معلقة.", show_alert=True)
         return
     source_chat, source_message = pending
+    await call.answer("بدأت الإذاعة.")
     recipients = db.list_users()
     sent = failed = 0
     status = await call.message.edit_text(f"بدأت الإذاعة إلى {len(recipients)} مستخدم...")
