@@ -3,7 +3,7 @@ from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery
 from fahs import db
-from fahs.content import TIPS, SCAMS, DATA_RISKS, EMERGENCY, QUIZ
+from fahs.content import TIPS, SCAMS, DATA_RISKS, EMERGENCY, QUIZ, GLOSSARY
 from fahs.keyboards import main_menu, back_menu, settings_menu, emergency_menu
 from fahs.scanner import scan_url
 from fahs.config import settings
@@ -192,3 +192,10 @@ async def privacy(call: CallbackQuery):
         reply_markup=back_menu())
     await call.answer()
 
+
+@router.callback_query(F.data == "glossary")
+async def glossary(call: CallbackQuery):
+    body = "<b>قاموس الأمن الرقمي</b>\\n\\n" + "\\n\\n".join(
+        f"<b>{term}</b>\\n{meaning}" for term, meaning in GLOSSARY.items())
+    await call.message.edit_text(body, reply_markup=back_menu())
+    await call.answer()
