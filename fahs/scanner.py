@@ -116,11 +116,9 @@ async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
         port = parts.port or (443 if parts.scheme == "https" else 80)
         target_ip = addresses[0]
         tls = ssl.create_default_context() if parts.scheme == "https" else None
-        path = quote(parts.path or "/", safe="/%:@!        path = parts.path or "/"
+        path = quote(parts.path or "/", safe="/%:@!()*+,;=-._~")
         if parts.query:
-            path += "?" + parts.query'()*+,;=-._~")
-        if parts.query:
-            path += "?" + quote(parts.query, safe="=&?/%:@!
+            path += "?" + quote(parts.query, safe="=&?/%:@!()*+,;~-._")
         authority = parts.netloc
         request = (
             f"HEAD {path} HTTP/1.1\r\n"
