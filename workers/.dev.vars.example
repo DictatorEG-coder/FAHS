@@ -3,3 +3,5 @@ BOT_TOKEN=123456:ABC...
 OWNER_ID=123456789
 WEBHOOK_SECRET=اكتب_نص_عشوائي_طويل_بحروف_وأرقام
 VT_API_KEY=
+# اتركها 0 ما لم توافق صراحة على إرسال الروابط إلى VirusTotal
+VT_EXTERNAL_SCAN_CONSENT=0
