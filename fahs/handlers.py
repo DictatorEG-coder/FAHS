@@ -124,6 +124,9 @@ async def group_delete_off(message: Message):
 
 @router.message(Command("delete_my_data"))
 async def delete_my_data(message: Message):
+    if message.chat.type != "private":
+        await message.reply("نفّذ هذا الأمر في المحادثة الخاصة مع فَحْص حفاظًا على خصوصيتك.")
+        return
     if message.from_user:
         db.delete_user(message.from_user.id)
         await message.answer("حُذفت إعداداتك ومعرّفك من قاعدة بيانات فَحْص. لا يشمل ذلك سجل رسائل تيليجرام أو بيانات تحتفظ بها المنصة.")
