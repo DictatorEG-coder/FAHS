@@ -172,6 +172,12 @@ async def _scan_url(raw: str) -> dict:
     reasons = []
     score = 0
     labels = [x for x in re.split(r"[./_-]", host) if x]
+    try:
+        ipaddress.ip_address(host)
+        score += 1
+        reasons.append("الرابط يستخدم عنوان IP مباشرًا بدل اسم نطاق معروف")
+    except ValueError:
+        pass
     if host in SHORTENERS:
         score += 1
         reasons.append("الرابط يستخدم خدمة اختصار؛ الوجهة النهائية تحتاج تحققًا")
