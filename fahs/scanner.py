@@ -47,6 +47,8 @@ def _normalise(raw: str) -> str:
     raw = raw.strip()
     if len(raw) > settings.max_url_length:
         raise ValueError("الرابط أطول من الحد المسموح")
+    if "://" in raw and not re.match(r"^https?://", raw, re.I):
+        raise ValueError("يُسمح بروابط HTTP وHTTPS فقط")
     if not re.match(r"^https?://", raw, re.I):
         raw = "https://" + raw
     parts = urlsplit(raw)
@@ -134,7 +136,7 @@ async def scan_url(raw: str) -> dict:
     score = 0
     labels = [x for x in re.split(r"[./_-]", host) if x]
     feed_entries = await _openphish_entries()
-    if url in feed_entries or host in feed_entries:
+    if url in feed_entries:
         return {"level": "خطر حرج", "score": 10,
                 "reasons": ["تطابق الرابط أو النطاق مع مؤشر وارد في مصدر OpenPhish المفعّل."],
                 "url": url, "host": host, "ips": addresses, "chain": [], "source": "OpenPhish"}
