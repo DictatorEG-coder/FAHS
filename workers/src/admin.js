@@ -97,7 +97,9 @@ async function showSettings(env, msg) {
   const m = (await getSetting(env, "maintenance")) === "1";
   const vt = (await getSetting(env, "vt_enabled")) === "1";
   const lim = await getSetting(env, "scan_limit_per_hour");
-  const text = `⚙️ <b>إعدادات البوت</b>\n\n🛠 وضع الصيانة: <b>${m ? "مفعّل" : "متوقف"}</b>\n🛡 VirusTotal: <b>${vt ? "مفعّل" : "متوقف"}</b> ${env.VT_API_KEY ? "" : "(المفتاح غير مضاف)"}\n⏱ حد الفحص لكل مستخدم/ساعة: <b>${lim}</b>`;
+  const vtReady = vt && !!env.VT_API_KEY && env.VT_EXTERNAL_SCAN_CONSENT === "1";
+  const vtNote = !env.VT_API_KEY ? " (المفتاح غير مضاف)" : env.VT_EXTERNAL_SCAN_CONSENT !== "1" ? " (الإرسال الخارجي غير مصرح)" : "";
+  const text = `⚙️ <b>إعدادات البوت</b>\n\n🛠 وضع الصيانة: <b>${m ? "مفعّل" : "متوقف"}</b>\n🛡 VirusTotal: <b>${vtReady ? "جاهز" : "غير نشط"}</b>${vtNote}\n⚠️ تفعيل VirusTotal يرسل الرابط إلى خدمة خارجية.\n⏱ حد الفحص لكل مستخدم/ساعة: <b>${lim}</b>`;
   return editOrSend(env, msg, text, {
     reply_markup: kb([
       [btn(m ? "✅ إيقاف الصيانة" : "🛠 تفعيل الصيانة", "a:tg:maintenance")],
