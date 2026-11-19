@@ -105,7 +105,17 @@ def _brand_lookalike(host: str) -> str | None:
     return None
 
 def _has_sensitive_query(url: str) -> bool:
-    return any(SENSITIVE_KEY_RE.search(k) for k, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True))
+    for key, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True):
+        compact = re.sub(r"[^a-z0-9]", "", key.lower())
+        if SENSITIVE_KEY_RE.search(key):
+            return True
+        if compact in {"code", "verificationcode", "accesscode", "pin"}:
+            return True
+        if compact.endswith(("token", "key", "secret", "password", "otp", "sid", "ticket")):
+            return True
+        if compact.startswith(("auth", "session")):
+            return True
+    return False
 
 async def _redirect_chain(start: str) -> tuple[list[str], str | None]:
     """Follow only HEAD redirects, connecting to the exact IP that passed validation."""
