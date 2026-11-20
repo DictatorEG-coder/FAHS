@@ -65,6 +65,8 @@ await t("التحليل المحلي: انتحال وتمويه", () => {
 await t("تحذير منصات الاستضافة المشتركة وPunycode", () => {
   assert.ok(analyzeLocal(new URL("https://demo.workers.dev/")).score >= 30);
   assert.ok(analyzeLocal(new URL("https://xn--e1afmkfd.example/")).score >= 30);
+  assert.ok(analyzeLocal(new URL("https://bit.ly/abc")).score >= 20);
+  assert.ok(analyzeLocal(new URL("https://evil.example/google.com/login")).score >= 20);
 });
 await t("التقاط صيغ روابط الويب والروابط ذات البروتوكولات الأخرى", () => {
   const links = extractUrls("https://example.com ftp://files.example.com tg://resolve?domain=test");
