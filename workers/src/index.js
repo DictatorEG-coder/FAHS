@@ -218,9 +218,11 @@ export default {
     ctx.waitUntil((async () => {
       await ensureDb(env);
       await processBroadcasts(env);
-      const cairoNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Cairo" }));
-      if (cairoNow.getDay() !== 5) return;
-      const fridayKey = cairoNow.getFullYear() + "-" + String(cairoNow.getMonth() + 1).padStart(2, "0") + "-" + String(cairoNow.getDate()).padStart(2, "0");
+      const cairoParts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+        timeZone: "Africa/Cairo", weekday: "short", year: "numeric", month: "2-digit", day: "2-digit",
+      }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+      if (cairoParts.weekday !== "Fri") return;
+      const fridayKey = cairoParts.year + "-" + cairoParts.month + "-" + cairoParts.day;
       if (await getSetting(env, "friday_reminder_sent") === fridayKey) return;
       const lastId = Number(await getSetting(env, "friday_reminder_last_user") || 0);
       const users = await all(env, "SELECT id FROM users WHERE id>? AND banned=0 AND active=1 ORDER BY id LIMIT 25", lastId);
