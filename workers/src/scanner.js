@@ -112,7 +112,7 @@ export function analyzeLocal(url, chainLen = 1, finalUrl = null) {
   const hostedOnSharedPlatform = [...HOSTING_PLATFORMS].some((suffix) => hostMatches(host, suffix));
   if (hostedOnSharedPlatform) add(30, "الرابط مستضاف على منصة استضافة مشتركة؛ هذا لا يثبت الخبث لكنه لا يثبت موثوقية صاحب الصفحة أيضاً");
   if ((host.match(/-/g) || []).length >= 3) add(10, "اسم النطاق يحتوي شرطات كثيرة");
-  if (BAD_TLDS.has(tld)) add(15, `امتداد النطاق (.${tld}) شائع في الروابط الاحتيالية`);
+  if (BAD_TLDS.has(tld)) add(20, `امتداد النطاق (.${tld}) شائع في الروابط الاحتيالية`);
   if (full.length > 200) add(5, "الرابط طويل جداً");
 
   const kwHost = KEYWORDS.filter((k) => host.includes(k));
@@ -122,8 +122,15 @@ export function analyzeLocal(url, chainLen = 1, finalUrl = null) {
   if (/(?:camera|webcam|photo|capture|snapshot|getusermedia|microphone|record)/i.test(target.pathname + target.search)) {
     add(20, "الرابط يحتوي مؤشرات مرتبطة بالكاميرا أو الميكروفون أو التقاط الوسائط؛ لا يمكن إثبات سلوك الصفحة دون تحليلها");
   }
-  if (/(?:redirect|returnurl|return_url|continue|next|target|dest|destination|url)=https?%3a/i.test(target.search)) {
-    add(15, "الرابط يحتوي وجهة تحويل مضمّنة قد تقود إلى موقع آخر");
+  if (/(?:redirect|returnurl|return_url|continue|next|target|dest|destination|url)=https?(?:%3a|:)/i.test(target.search)) {
+    add(20, "الرابط يحتوي وجهة تحويل مضمّنة قد تقود إلى موقع آخر");
+  }
+  const pathText = (target.pathname + target.search).toLowerCase();
+  for (const [brand, doms] of Object.entries(BRANDS)) {
+    if (pathText.includes(brand) && !doms.some((d) => hostMatches(host, d))) {
+      add(20, `يظهر اسم «${brand}» داخل مسار الرابط وليس في نطاقه الرسمي؛ تحقق من الوجهة`);
+      break;
+    }
   }
 
   for (const [brand, doms] of Object.entries(BRANDS)) {
@@ -142,7 +149,7 @@ export function analyzeLocal(url, chainLen = 1, finalUrl = null) {
       }
     }
   }
-  if (SHORTENERS.has(host) || SHORTENERS.has(url.hostname.toLowerCase())) add(5, "رابط مختصر يخفي الوجهة الأصلية");
+  if (SHORTENERS.has(host) || SHORTENERS.has(url.hostname.toLowerCase())) add(20, "رابط مختصر يخفي الوجهة الأصلية");
   if (chainLen > 3) add(10, "تحويلات متعددة قبل الوصول للوجهة");
   if (finalUrl && finalUrl.hostname.toLowerCase() !== url.hostname.toLowerCase()) {
     if (!SHORTENERS.has(url.hostname.toLowerCase())) add(5, "الرابط يحوّلك إلى موقع مختلف");
