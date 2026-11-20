@@ -54,7 +54,7 @@ export function extractUrls(text, entities = []) {
     if (e.type === "text_link" && e.url) found.push(e.url);
     if (e.type === "url") found.push(text.substr(e.offset, e.length));
   }
-  const re = /(?:https?:\/\/|hxxps?:\/\/|www\.|(?:ftp|ftps|tg|mailto|tel|magnet|intent|file|javascript):)[^\s<>"'،]+|\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?(?:\/[^\s<>"'،]*)?|\b[a-z0-9\p{L}-]{1,63}(?:\.[a-z0-9\p{L}-]{1,63})*\.[a-z\p{L}]{2,24}\b(?::\d{1,5})?(?:\/[^\s<>"'،]*)?/giu;
+  const re = /(?:https?:\/\/|hxxps?:\/\/|www\.|(?:ftp|ftps|sftp|ssh|smb|tg|mailto|tel|sms|magnet|intent|file|javascript|data|blob|geo|skype|whatsapp|discord|market|facetime|bitcoin|ethereum|zoommtg|slack|signal|steam|viber|line|fb|instagram|youtube):)[^\s<>"'،]+|\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?(?:\/[^\s<>"'،]*)?|\b[a-z0-9\p{L}-]{1,63}(?:\.[a-z0-9\p{L}-]{1,63})*\.[a-z\p{L}]{2,24}\b(?::\d{1,5})?(?:\/[^\s<>"'،]*)?/giu;
   for (const m of source.matchAll(re)) {
     const ext = m[0].split("/")[0].split(".").pop().toLowerCase();
     if (FILE_EXT.has(ext) && !m[0].includes("/")) continue; // اسم ملف وليس نطاقاً
