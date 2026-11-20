@@ -67,11 +67,12 @@ await t("تحذير منصات الاستضافة المشتركة وPunycode", 
   assert.ok(analyzeLocal(new URL("https://xn--e1afmkfd.example/")).score >= 30);
 });
 await t("التقاط صيغ روابط الويب والروابط ذات البروتوكولات الأخرى", () => {
-  const links = extractUrls("https://example.com ftp://files.example.com tg://resolve?domain=test 192.0.2.1/login");
+  const links = extractUrls("https://example.com ftp://files.example.com tg://resolve?domain=test");
+  const ipLinks = extractUrls("192.0.2.1/login");
   assert.ok(links.some((x) => x.startsWith("https://")));
   assert.ok(links.some((x) => x.startsWith("ftp://")));
   assert.ok(links.some((x) => x.startsWith("tg://")));
-  assert.ok(links.some((x) => x.startsWith("192.0.2.1")));
+  assert.ok(ipLinks.some((x) => x.startsWith("192.0.2.1")));
   assert.ok(extractUrls("hxxps://example[.]com").some((x) => x.includes("example.com")));
   assert.ok(normalizeUrl("hxxps://example.com").url);
   assert.ok(normalizeUrl("ftp://files.example.com").error);
