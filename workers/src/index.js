@@ -224,6 +224,10 @@ export default {
       if (cairoParts.weekday !== "Fri") return;
       const fridayKey = cairoParts.year + "-" + cairoParts.month + "-" + cairoParts.day;
       if (await getSetting(env, "friday_reminder_sent") === fridayKey) return;
+      if (await getSetting(env, "friday_reminder_date") !== fridayKey) {
+        await setSetting(env, "friday_reminder_date", fridayKey);
+        await setSetting(env, "friday_reminder_last_user", "0");
+      }
       const lastId = Number(await getSetting(env, "friday_reminder_last_user") || 0);
       const users = await all(env, "SELECT id FROM users WHERE id>? AND banned=0 AND active=1 ORDER BY id LIMIT 25", lastId);
       if (!users.length) {
