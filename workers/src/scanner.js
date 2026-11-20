@@ -8,7 +8,7 @@ const SHORTENERS = new Set([
 const HOSTING_PLATFORMS = new Set([
   "workers.dev","pages.dev","vercel.app","netlify.app","github.io","web.app","firebaseapp.com",
   "onrender.com","fly.dev","ngrok-free.app","ngrok.io","trycloudflare.com","replit.app","repl.co",
-  "glitch.me"," herokuapp.com","surge.sh","duckdns.org","no-ip.org","serveo.net","localtunnel.me",
+  "glitch.me","herokuapp.com","surge.sh","duckdns.org","no-ip.org","serveo.net","localtunnel.me",
 ]);
 const BAD_TLDS = new Set([
   "zip","mov","top","xyz","tk","ml","ga","cf","gq","click","country","work","support","rest","icu","cyou","buzz","loan","monster","sbs","cfd","vip","bid","men","stream","download","gdn","kim","party","review","trade","webcam","win",
