@@ -61,7 +61,7 @@ export async function ensureDb(env) {
   const menuV2 = await db.prepare("SELECT value FROM settings WHERE key='scanner_menu_v2_seeded'").first();
   if (!menuV2) {
     const extra = [];
-    for (const s of SEED_SECTIONS.filter((x) => [45, 46, 47].includes(x.id))) {
+    for (const s of SEED_SECTIONS.filter((x) => [45, 46, 47, 48, 49].includes(x.id))) {
       extra.push(db.prepare("INSERT OR IGNORE INTO sections (id,parent_id,title,position,visible) VALUES (?,?,?,?,1)").bind(s.id, s.parent || 0, s.title, s.pos));
     }
     for (const b of SEED_BLOCKS.filter((x) => [45, 46, 47].includes(x.sec))) {
