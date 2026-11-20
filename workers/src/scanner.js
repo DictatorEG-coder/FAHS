@@ -49,7 +49,7 @@ export function isPrivateHost(host) {
 // ---------- استخراج وتنظيف الروابط
 export function extractUrls(text, entities = []) {
   const found = [];
-  const source = text.replace(/\\[(?:\\.|dot)\\]|\\(\\.\\)|\\{\\.\\}/gi, ".");
+  const source = text.replace(/\[(?:\.|dot)\]|\(\.\)|\{\.\}/gi, ".");
   for (const e of entities || []) {
     if (e.type === "text_link" && e.url) found.push(e.url);
     if (e.type === "url") found.push(text.substr(e.offset, e.length));
@@ -83,7 +83,7 @@ export function normalizeUrl(raw) {
   if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "يُفحص http و https فقط." };
   const hasUserInfo = !!(u.username || u.password);
   if (u.hostname.length > 253 || u.href.length > 2048) return { error: "الرابط أطول من الحد المسموح." };
-  return { url: u, assumedScheme: !/^https?:\/\//i.test(raw.trim()) };
+  return { url: u, assumedScheme: !/^https?:\/\//i.test(raw.trim()), hasUserInfo };
 }
 
 // لا يفتح FAHS الروابط ولا يتصل بوجهاتها. تتبع التحويلات عبر fetch داخل Worker
