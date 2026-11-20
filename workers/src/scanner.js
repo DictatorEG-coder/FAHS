@@ -3,7 +3,7 @@ import { b64url, esc, sleep } from "./util.js";
 
 const SHORTENERS = new Set([
   "bit.ly","bitly.com","tinyurl.com","t.co","goo.gl","is.gd","cutt.ly","rebrand.ly","shorturl.at","ow.ly",
-  "buff.ly","tiny.cc","rb.gy","t.ly","s.id","lnkd.in","v.gd","shorte.st","adf.ly","bl.ink","soo.gd","clck.ru","qr.ae","tr.ee","urlz.fr","short.io","kutt.it","cutt.ly","t2m.io","reurl.cc","tiny.one","linktr.ee","
+  "buff.ly","tiny.cc","rb.gy","t.ly","s.id","lnkd.in","v.gd","shorte.st","adf.ly","bl.ink","soo.gd","clck.ru","qr.ae","tr.ee","urlz.fr","short.io","kutt.it","cutt.ly","t2m.io","reurl.cc","tiny.one","linktr.ee",
 ]);
 const HOSTING_PLATFORMS = new Set([
   "workers.dev","pages.dev","vercel.app","netlify.app","github.io","web.app","firebaseapp.com",
