@@ -53,6 +53,8 @@ export async function ensureDb(env) {
     for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
       st.push(db.prepare("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)").bind(k, v));
     }
+    st.push(db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('scanner_menu_v2_seeded','1')"));
+    st.push(db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('scanner_menu_v3_seeded','1')"));
     st.push(db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('seeded','1')"));
     // دفعات صغيرة لتفادي حدود D1
     for (let i = 0; i < st.length; i += 50) await db.batch(st.slice(i, i + 50));
