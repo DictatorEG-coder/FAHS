@@ -217,7 +217,7 @@ const LEVEL_TXT = {
   danger: "🔴 <b>خطير</b>",
   high: "🟠 <b>خطورة مرتفعة</b>",
   warn: "🟡 <b>مشبوه</b>",
-  ok: "🟢 <b>لم تظهر مؤشرات خطر</b>",
+  ok: "🟢 <b>لم تُكتشف مؤشرات خطر واضحة</b>",
 };
 const ADVICE = {
   danger: "⛔ <b>لا تفتح الرابط ولا تُدخل أي بيانات.</b> احذف الرسالة، وإن كانت من شخص تعرفه فتواصل معه بقناة أخرى.",
@@ -242,6 +242,7 @@ export function formatReport({ original, chain, finalUrl, local, vt, vtEnabled, 
     lines.push(`🔀 <b>الوجهة النهائية</b> (بعد ${chain.length - 1} تحويل):\n<code>${esc(shorten(chain[chain.length - 1], 180))}</code>`);
   }
   lines.push(`📊 <b>مستوى الخطورة:</b> ${LEVEL_TXT[verdict.level]}`);
+  lines.push(`📈 <b>مؤشر الاشتباه:</b> ${Math.min(100, verdict.score)}/100`);
   lines.push("");
   if (vt && vt.total !== undefined) {
     lines.push(`🛡 <b>VirusTotal:</b> ${vt.malicious} خطير، ${vt.suspicious} مشبوه، من أصل ${vt.total} محرك فحص`);
