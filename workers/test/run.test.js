@@ -56,7 +56,7 @@ await t("normalizeUrl يرفض javascript: و file:", () => {
   assert.ok(normalizeUrl("javascript:alert(1)").error);
   assert.ok(normalizeUrl("file:///etc/passwd").error);
   assert.equal(normalizeUrl("example.com/a").url.hostname, "example.com");
-  assert.ok(normalizeUrl("https://user:pass@example.com").error);
+  assert.equal(normalizeUrl("https://user:pass@example.com").hasUserInfo, true);
 });
 await t("التحليل المحلي: انتحال وتمويه", () => {
   assert.ok(analyzeLocal(new URL("http://paypal.login-secure.xyz/verify")).score >= 70);
@@ -72,6 +72,7 @@ await t("التقاط صيغ روابط الويب والروابط ذات ال�
   assert.ok(links.some((x) => x.startsWith("ftp://")));
   assert.ok(links.some((x) => x.startsWith("tg://")));
   assert.ok(links.some((x) => x.startsWith("192.0.2.1")));
+  assert.ok(extractUrls("hxxps://example[.]com").some((x) => x.includes("example.com")));
   assert.ok(normalizeUrl("hxxps://example.com").url);
   assert.ok(normalizeUrl("ftp://files.example.com").error);
 });
