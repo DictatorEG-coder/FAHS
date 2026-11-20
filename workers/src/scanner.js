@@ -53,7 +53,7 @@ export function extractUrls(text, entities = []) {
     if (e.type === "text_link" && e.url) found.push(e.url);
     if (e.type === "url") found.push(text.substr(e.offset, e.length));
   }
-  const re = /(?:https?:\/\/|www\.)[^\s<>"'،]+|\b[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})*\.[a-z]{2,24}\b(?:\/[^\s<>"'،]*)?/gi;
+  const re = /(?:https?:\\/\\/|hxxps?:\\/\\/|www\\.|(?:ftp|ftps|tg|mailto|tel|magnet|intent|file|javascript):)[^\\s<>"'،]+|\\b(?:\\d{1,3}\\.){3}\\d{1,3}(?::\\d{1,5})?(?:\\/[^\\s<>"'،]*)?|\\b[a-z0-9\\p{L}-]{1,63}(?:\\.[a-z0-9\\p{L}-]{1,63})*\\.[a-z\\p{L}]{2,24}\\b(?::\\d{1,5})?(?:\\/[^\\s<>"'،]*)?/giu;
   for (const m of text.matchAll(re)) {
     const ext = m[0].split("/")[0].split(".").pop().toLowerCase();
     if (FILE_EXT.has(ext) && !m[0].includes("/")) continue; // اسم ملف وليس نطاقاً
@@ -69,7 +69,10 @@ export function extractUrls(text, entities = []) {
 }
 
 export function normalizeUrl(raw) {
-  let s = raw.trim();
+  let s = raw.trim()
+    .replace(/^hxxps:/i, "https:")
+    .replace(/^hxxp:/i, "http:")
+    .replace(/\\[(?:\\.|dot)\\]|\\(\\.\\)|\\{\\.\\}/gi, ".");
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
     if (/^[a-z][a-z0-9+.-]*:/i.test(s) && !/^[a-z0-9.-]+:\d+/i.test(s)) return { error: "نوع الرابط غير مدعوم (يُفحص http و https فقط)." };
     s = "http://" + s;
