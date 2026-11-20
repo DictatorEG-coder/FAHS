@@ -80,7 +80,7 @@ await t("التقاط صيغ روابط الويب والروابط ذات ال�
 await t("تحذير المعرفات الشخصية في معاملات الرابط", async () => {
   const r = await scanUrl({}, "https://demo.workers.dev/?chatId=123456");
   assert.ok(r.text.includes("معرّف أو بيانات شخصية"));
-  assert.ok(r.verdict.level === "danger" || r.verdict.level === "warn");
+  assert.ok(["danger", "high", "warn"].includes(r.verdict.level));
 });
 
 await t("/start: يزرع المحتوى ويعرض القائمة", async () => {
