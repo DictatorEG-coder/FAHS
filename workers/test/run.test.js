@@ -79,10 +79,19 @@ await t("التقاط صيغ روابط الويب والروابط ذات ال�
   assert.ok(normalizeUrl("hxxps://example.com").url);
   assert.ok(normalizeUrl("ftp://files.example.com").error);
 });
+await t("userinfo لا يرفع الخطورة وحده ويظهر كتحذير خصوصية", async () => {
+  const a = analyzeLocal(new URL("https://login.example@google.com/"));
+  assert.equal(a.score, 0);
+  assert.ok(a.reasons.some((x) => x.includes("تنبيه خصوصية")));
+});
+await t("نهاية تقرير الفحص تتضمن الصلاة على النبي ﷺ", async () => {
+  const r = await scanUrl({}, "https://example.com/");
+  assert.ok(r.text.endsWith("🌿 وصلِّ على النبي ﷺ"));
+});
 await t("تحذير المعرفات الشخصية في معاملات الرابط", async () => {
   const r = await scanUrl({}, "https://demo.workers.dev/?chatId=123456");
   assert.ok(r.text.includes("معرّف أو بيانات شخصية"));
-  assert.ok(["danger", "high", "warn"].includes(r.verdict.level));
+  assert.equal(r.verdict.level, "warn");
 });
 
 await t("/start: يزرع المحتوى ويعرض القائمة", async () => {
