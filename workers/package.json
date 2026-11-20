@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm test && wrangler deploy",
     "test": "node --no-warnings test/run.test.js"
   },
   "devDependencies": {
