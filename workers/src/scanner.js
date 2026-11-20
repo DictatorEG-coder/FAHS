@@ -207,18 +207,21 @@ export function verdictFrom(localScore, vt) {
   const vtMal = vt?.malicious || 0;
   let level;
   if (vtMal >= 3 || score >= 70) level = "danger";
-  else if (vtMal >= 1 || (vt?.suspicious || 0) >= 1 || score >= 30) level = "warn";
+  else if (score >= 50) level = "high";
+  else if (vtMal >= 1 || (vt?.suspicious || 0) >= 1 || score >= 20) level = "warn";
   else level = "ok";
   return { level, score };
 }
 
 const LEVEL_TXT = {
   danger: "🔴 <b>خطير</b>",
+  high: "🟠 <b>خطورة مرتفعة</b>",
   warn: "🟡 <b>مشبوه</b>",
   ok: "🟢 <b>لم تظهر مؤشرات خطر</b>",
 };
 const ADVICE = {
   danger: "⛔ <b>لا تفتح الرابط ولا تُدخل أي بيانات.</b> احذف الرسالة، وإن كانت من شخص تعرفه فتواصل معه بقناة أخرى.",
+  high: "🟠 <b>مخاطر مرتفعة.</b> لا تفتح الرابط ولا تمنحه صلاحيات أو بيانات، وتحقق من الجهة عبر موقعها الرسمي.",
   warn: "⚠️ <b>تعامل بحذر.</b> لا تُدخل كلمة مرور أو رمزاً أو بيانات بنكية، وتأكد من المصدر بقناة أخرى.",
   ok: "ℹ️ هذه النتيجة <b>لا تعني ضماناً كاملاً</b>؛ فالروابط الجديدة قد لا تكون مرصودة بعد. لا تُدخل بياناتك إلا إن كنت متأكداً من الجهة.",
 };
