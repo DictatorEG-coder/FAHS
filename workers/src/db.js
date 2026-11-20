@@ -84,6 +84,19 @@ export async function ensureDb(env) {
     extra.push(db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('scanner_menu_v3_seeded','1')"));
     for (let i = 0; i < extra.length; i += 50) await db.batch(extra.slice(i, i + 50));
   }
+
+  const menuV4 = await db.prepare("SELECT value FROM settings WHERE key='scanner_menu_v4_seeded'").first();
+  if (!menuV4) {
+    const extra = [];
+    for (const s of SEED_SECTIONS.filter((x) => [50, 51, 52, 53, 54].includes(x.id))) {
+      extra.push(db.prepare("INSERT OR IGNORE INTO sections (id,parent_id,title,position,visible) VALUES (?,?,?,?,1)").bind(s.id, s.parent || 0, s.title, s.pos));
+    }
+    for (const b of SEED_BLOCKS.filter((x) => [50, 51, 52, 53, 54].includes(x.sec))) {
+      extra.push(db.prepare("INSERT INTO blocks (section_id,position,type,content,caption) VALUES (?,?,?,?,?)").bind(b.sec, 0, "text", b.text, null));
+    }
+    extra.push(db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('scanner_menu_v4_seeded','1')"));
+    for (let i = 0; i < extra.length; i += 50) await db.batch(extra.slice(i, i + 50));
+  }
   ready = true;
 }
 
