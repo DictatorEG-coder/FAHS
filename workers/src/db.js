@@ -61,13 +61,25 @@ export async function ensureDb(env) {
   const menuV2 = await db.prepare("SELECT value FROM settings WHERE key='scanner_menu_v2_seeded'").first();
   if (!menuV2) {
     const extra = [];
-    for (const s of SEED_SECTIONS.filter((x) => [45, 46, 47, 48, 49].includes(x.id))) {
+    for (const s of SEED_SECTIONS.filter((x) => [45, 46, 47].includes(x.id))) {
       extra.push(db.prepare("INSERT OR IGNORE INTO sections (id,parent_id,title,position,visible) VALUES (?,?,?,?,1)").bind(s.id, s.parent || 0, s.title, s.pos));
     }
-    for (const b of SEED_BLOCKS.filter((x) => [45, 46, 47, 48, 49].includes(x.sec))) {
+    for (const b of SEED_BLOCKS.filter((x) => [45, 46, 47].includes(x.sec))) {
       extra.push(db.prepare("INSERT INTO blocks (section_id,position,type,content,caption) VALUES (?,?,?,?,?)").bind(b.sec, 0, "text", b.text, null));
     }
     extra.push(db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('scanner_menu_v2_seeded','1')"));
+    for (let i = 0; i < extra.length; i += 50) await db.batch(extra.slice(i, i + 50));
+  }
+  const menuV3 = await db.prepare("SELECT value FROM settings WHERE key='scanner_menu_v3_seeded'").first();
+  if (!menuV3) {
+    const extra = [];
+    for (const s of SEED_SECTIONS.filter((x) => [48, 49].includes(x.id))) {
+      extra.push(db.prepare("INSERT OR IGNORE INTO sections (id,parent_id,title,position,visible) VALUES (?,?,?,?,1)").bind(s.id, s.parent || 0, s.title, s.pos));
+    }
+    for (const b of SEED_BLOCKS.filter((x) => [48, 49].includes(x.sec))) {
+      extra.push(db.prepare("INSERT INTO blocks (section_id,position,type,content,caption) VALUES (?,?,?,?,?)").bind(b.sec, 0, "text", b.text, null));
+    }
+    extra.push(db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('scanner_menu_v3_seeded','1')"));
     for (let i = 0; i < extra.length; i += 50) await db.batch(extra.slice(i, i + 50));
   }
   ready = true;
