@@ -1,5 +1,5 @@
 // فَحْص | FAHS - نقطة الدخول (Cloudflare Worker)
-import { ensureDb, touchUser, getState, setState, clearState, rateLimit, getSetting, run } from "./db.js";
+import { ensureDb, touchUser, getState, setState, clearState, rateLimit, getSetting, setSetting, all, run } from "./db.js";
 import { send, kb, btn, tg, answerCb } from "./telegram.js";
 import { showHome, showSection, mainMenu } from "./content.js";
 import { handleAdminCallback, handleAdminMessage, adminHome, processBroadcasts } from "./admin.js";
@@ -213,8 +213,32 @@ export default {
     }
   },
 
-  // مهمة كل دقيقة: إكمال الإذاعات
+  // مهمة كل دقيقة: الإذاعات، وتذكير الجمعة مرة واحدة لكل أسبوع.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil((async () => { await ensureDb(env); await processBroadcasts(env); })().catch((e) => console.log("cron error:", e?.message)));
+    ctx.waitUntil((async () => {
+      await ensureDb(env);
+      await processBroadcasts(env);
+      const cairoNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Cairo" }));
+      if (cairoNow.getDay() !== 5) return;
+      const fridayKey = cairoNow.getFullYear() + "-" + String(cairoNow.getMonth() + 1).padStart(2, "0") + "-" + String(cairoNow.getDate()).padStart(2, "0");
+      if (await getSetting(env, "friday_reminder_sent") === fridayKey) return;
+      const lastId = Number(await getSetting(env, "friday_reminder_last_user") || 0);
+      const users = await all(env, "SELECT id FROM users WHERE id>? AND banned=0 AND active=1 ORDER BY id LIMIT 25", lastId);
+      if (!users.length) {
+        await setSetting(env, "friday_reminder_sent", fridayKey);
+        await setSetting(env, "friday_reminder_last_user", "0");
+        return;
+      }
+      let lastSent = lastId;
+      for (const user of users) {
+        const result = await send(env, user.id,
+          "🕌 <b>تذكير يوم الجمعة</b>\\n\\nأكثروا من الصلاة والسلام على النبي ﷺ.\\nواحرصوا على قراءة سورة الكهف.\\n\\nاللهم صلِّ وسلم وبارك على نبينا محمد ﷺ.");
+        if (result?.ok === false && [400, 403].includes(result.error_code)) {
+          await run(env, "UPDATE users SET active=0 WHERE id=?", user.id);
+        }
+        lastSent = user.id;
+      }
+      await setSetting(env, "friday_reminder_last_user", String(lastSent));
+    })().catch((e) => console.log("cron error:", e?.message)));
   },
 };
