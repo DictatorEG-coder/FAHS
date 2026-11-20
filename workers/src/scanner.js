@@ -106,7 +106,8 @@ export function analyzeLocal(url, chainLen = 1, finalUrl = null) {
   if (url.protocol === "http:") add(10, "الرابط لا يستخدم تشفير HTTPS");
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) add(30, "الرابط يستخدم عنوان IP بدل اسم موقع");
   if (host.includes("xn--")) add(30, "اسم النطاق يحتوي ترميزاً (Punycode) قد يخفي حروفاً مشابهة لحروف أخرى");
-  if (target.username || target.password) add(30, "يحتوي الرابط على علامة @ أو بيانات دخول لإخفاء الوجهة");
+  // بيانات userinfo قد تخفي الوجهة بصرياً، لكنها ليست دليلاً كافياً على الخبث وحدها.
+  const hasUserInfo = !!(target.username || target.password);
   if (labels.length > 4) add(10, "عدد كبير من النطاقات الفرعية");
   if (host.length > 40) add(10, "اسم النطاق طويل بشكل غير معتاد");
   const hostedOnSharedPlatform = [...HOSTING_PLATFORMS].some((suffix) => hostMatches(host, suffix));
@@ -154,6 +155,7 @@ export function analyzeLocal(url, chainLen = 1, finalUrl = null) {
   if (finalUrl && finalUrl.hostname.toLowerCase() !== url.hostname.toLowerCase()) {
     if (!SHORTENERS.has(url.hostname.toLowerCase())) add(5, "الرابط يحوّلك إلى موقع مختلف");
   }
+  if (hasUserInfo) reasons.push("تنبيه خصوصية: يحتوي الرابط على بيانات قبل علامة @؛ تحقق من اسم النطاق الحقيقي ولا تُدخل بياناتك.");
   return { score, reasons };
 }
 
@@ -266,6 +268,8 @@ export function formatReport({ original, chain, finalUrl, local, vt, vtEnabled, 
   for (const n of notes) lines.push(`• ${esc(n)}`);
   lines.push("");
   lines.push(ADVICE[verdict.level]);
+  lines.push("");
+  lines.push("🌿 وصلِّ على النبي ﷺ");
   return lines.join("\n");
 }
 
@@ -291,8 +295,8 @@ export async function scanUrl(env, raw, { useVt = false } = {}) {
   const sensitiveKeys = [...url.searchParams.keys()].map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, ""));
   const sensitive = !!(url.username || url.password) || sensitiveKeys.some((key) => /^(?:token|accesstoken|auth|authorization|session|code|verificationcode|otp|password|secret|key|sid|ticket|jwt|signature|cookie|credential|pin|chatid|userid|user_id|email|phone|mobile|accountid)$/.test(key)) || /(?:token|auth|session|otp|password|secret|signature)/i.test(url.hash);
   if (sensitive) {
-    local.score += 20;
-    local.reasons.push("قد يحتوي الرابط على معرّف أو بيانات شخصية/حساسة ضمن معاملات العنوان؛ تجنّب نشره علناً");
+    local.reasons.push("تنبيه خصوصية: قد يحتوي الرابط على معرّف أو بيانات شخصية/رمز وصول ضمن معاملات العنوان؛ تجنّب نشره علناً.");
+
   }
   const vt = useVt && !sensitive ? await vtLookup(env, target) : { skipped: sensitive ? "sensitive_url" : "disabled" };
   const verdict = verdictFrom(local.score, vt);
