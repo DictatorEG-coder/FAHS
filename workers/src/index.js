@@ -239,8 +239,13 @@ export default {
       for (const user of users) {
         const result = await send(env, user.id,
           "🕌 <b>تذكير يوم الجمعة</b>\\n\\nأكثروا من الصلاة والسلام على النبي ﷺ.\\nواحرصوا على قراءة سورة الكهف.\\n\\nاللهم صلِّ وسلم وبارك على نبينا محمد ﷺ.");
-        if (result?.ok === false && [400, 403].includes(result.error_code)) {
-          await run(env, "UPDATE users SET active=0 WHERE id=?", user.id);
+        if (!result?.ok) {
+          if ([400, 403].includes(result.error_code)) {
+            await run(env, "UPDATE users SET active=0 WHERE id=?", user.id);
+            lastSent = user.id;
+            continue;
+          }
+          break; // خطأ مؤقت أو حد إرسال: أعد المحاولة في دورة Cron التالية.
         }
         lastSent = user.id;
       }
