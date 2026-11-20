@@ -62,7 +62,7 @@ export async function ensureDb(env) {
   if (!menuV2) {
     const extra = [];
     for (const s of SEED_SECTIONS.filter((x) => [45, 46, 47].includes(x.id))) {
-      extra.push(db.prepare("INSERT OR IGNORE INTO sections (id,parent_id,title,position,visible) VALUES (?,?,?,?,1)").bind(s.id, s.parent || 0, s.pos, s.title));
+      extra.push(db.prepare("INSERT OR IGNORE INTO sections (id,parent_id,title,position,visible) VALUES (?,?,?,?,1)").bind(s.id, s.parent || 0, s.title, s.pos));
     }
     for (const b of SEED_BLOCKS.filter((x) => [45, 46, 47].includes(x.sec))) {
       extra.push(db.prepare("INSERT INTO blocks (section_id,position,type,content,caption) VALUES (?,?,?,?,?)").bind(b.sec, 0, "text", b.text, null));
