@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { makeD1 } from "./d1shim.js";
 import { entitiesToHtml, chunkText } from "../src/util.js";
-import { isPrivateHost, normalizeUrl, analyzeLocal, extractUrls } from "../src/scanner.js";
+import { isPrivateHost, normalizeUrl, analyzeLocal, extractUrls, scanUrl } from "../src/scanner.js";
 
 let pass = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log("✅", name); } catch (e) { console.log("❌", name, "\n", e.stack); process.exitCode = 1; } };
@@ -61,6 +61,24 @@ await t("normalizeUrl يرفض javascript: و file:", () => {
 await t("التحليل المحلي: انتحال وتمويه", () => {
   assert.ok(analyzeLocal(new URL("http://paypal.login-secure.xyz/verify")).score >= 70);
   assert.equal(analyzeLocal(new URL("https://www.google.com/")).score, 0);
+});
+await t("تحذير منصات الاستضافة المشتركة وPunycode", () => {
+  assert.ok(analyzeLocal(new URL("https://demo.workers.dev/")).score >= 30);
+  assert.ok(analyzeLocal(new URL("https://xn--e1afmkfd.example/")).score >= 30);
+});
+await t("التقاط صيغ روابط الويب والروابط ذات البروتوكولات الأخرى", () => {
+  const links = extractUrls("https://example.com ftp://files.example.com tg://resolve?domain=test 192.0.2.1/login");
+  assert.ok(links.some((x) => x.startsWith("https://")));
+  assert.ok(links.some((x) => x.startsWith("ftp://")));
+  assert.ok(links.some((x) => x.startsWith("tg://")));
+  assert.ok(links.some((x) => x.startsWith("192.0.2.1")));
+  assert.ok(normalizeUrl("hxxps://example.com").url);
+  assert.ok(normalizeUrl("ftp://files.example.com").error);
+});
+await t("تحذير المعرفات الشخصية في معاملات الرابط", async () => {
+  const r = await scanUrl({}, "https://demo.workers.dev/?chatId=123456");
+  assert.ok(r.text.includes("معرّف أو بيانات شخصية"));
+  assert.ok(r.verdict.level === "danger" || r.verdict.level === "warn");
 });
 
 await t("/start: يزرع المحتوى ويعرض القائمة", async () => {
