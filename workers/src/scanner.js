@@ -49,12 +49,13 @@ export function isPrivateHost(host) {
 // ---------- استخراج وتنظيف الروابط
 export function extractUrls(text, entities = []) {
   const found = [];
+  const source = text.replace(/\\[(?:\\.|dot)\\]|\\(\\.\\)|\\{\\.\\}/gi, ".");
   for (const e of entities || []) {
     if (e.type === "text_link" && e.url) found.push(e.url);
     if (e.type === "url") found.push(text.substr(e.offset, e.length));
   }
   const re = /(?:https?:\/\/|hxxps?:\/\/|www\.|(?:ftp|ftps|tg|mailto|tel|magnet|intent|file|javascript):)[^\s<>"'،]+|\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?(?:\/[^\s<>"'،]*)?|\b[a-z0-9\p{L}-]{1,63}(?:\.[a-z0-9\p{L}-]{1,63})*\.[a-z\p{L}]{2,24}\b(?::\d{1,5})?(?:\/[^\s<>"'،]*)?/giu;
-  for (const m of text.matchAll(re)) {
+  for (const m of source.matchAll(re)) {
     const ext = m[0].split("/")[0].split(".").pop().toLowerCase();
     if (FILE_EXT.has(ext) && !m[0].includes("/")) continue; // اسم ملف وليس نطاقاً
     found.push(m[0]);
@@ -80,7 +81,7 @@ export function normalizeUrl(raw) {
   let u;
   try { u = new URL(s); } catch { return { error: "الرابط غير صالح." }; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "يُفحص http و https فقط." };
-  if (u.username || u.password) return { error: "يحتوي الرابط على بيانات دخول؛ أوقفنا الفحص حفاظاً على الخصوصية." };
+  const hasUserInfo = !!(u.username || u.password);
   if (u.hostname.length > 253 || u.href.length > 2048) return { error: "الرابط أطول من الحد المسموح." };
   return { url: u, assumedScheme: !/^https?:\/\//i.test(raw.trim()) };
 }
@@ -277,7 +278,7 @@ export async function scanUrl(env, raw, { useVt = false } = {}) {
   const local = analyzeLocal(url, red.chain.length, finalUrl);
   const target = (finalUrl || url).href;
   const sensitiveKeys = [...url.searchParams.keys()].map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, ""));
-  const sensitive = sensitiveKeys.some((key) => /^(?:token|accesstoken|auth|authorization|session|code|verificationcode|otp|password|secret|key|sid|ticket|jwt|signature|cookie|credential|pin|chatid|userid|user_id|email|phone|mobile|accountid)$/.test(key)) || /(?:token|auth|session|otp|password|secret|signature)/i.test(url.hash);
+  const sensitive = !!(url.username || url.password) || sensitiveKeys.some((key) => /^(?:token|accesstoken|auth|authorization|session|code|verificationcode|otp|password|secret|key|sid|ticket|jwt|signature|cookie|credential|pin|chatid|userid|user_id|email|phone|mobile|accountid)$/.test(key)) || /(?:token|auth|session|otp|password|secret|signature)/i.test(url.hash);
   if (sensitive) {
     local.score += 20;
     local.reasons.push("قد يحتوي الرابط على معرّف أو بيانات شخصية/حساسة ضمن معاملات العنوان؛ تجنّب نشره علناً");
