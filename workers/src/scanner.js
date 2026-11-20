@@ -3,7 +3,12 @@ import { b64url, esc, sleep } from "./util.js";
 
 const SHORTENERS = new Set([
   "bit.ly","bitly.com","tinyurl.com","t.co","goo.gl","is.gd","cutt.ly","rebrand.ly","shorturl.at","ow.ly",
-  "buff.ly","tiny.cc","rb.gy","t.ly","s.id","lnkd.in","v.gd","shorte.st","adf.ly","bl.ink","soo.gd","clck.ru","qr.ae","tr.ee","urlz.fr",
+  "buff.ly","tiny.cc","rb.gy","t.ly","s.id","lnkd.in","v.gd","shorte.st","adf.ly","bl.ink","soo.gd","clck.ru","qr.ae","tr.ee","urlz.fr","short.io","kutt.it","cutt.ly","t2m.io","reurl.cc","tiny.one","linktr.ee","
+]);
+const HOSTING_PLATFORMS = new Set([
+  "workers.dev","pages.dev","vercel.app","netlify.app","github.io","web.app","firebaseapp.com",
+  "onrender.com","fly.dev","ngrok-free.app","ngrok.io","trycloudflare.com","replit.app","repl.co",
+  "glitch.me"," herokuapp.com","surge.sh","duckdns.org","no-ip.org","serveo.net","localtunnel.me",
 ]);
 const BAD_TLDS = new Set([
   "zip","mov","top","xyz","tk","ml","ga","cf","gq","click","country","work","support","rest","icu","cyou","buzz","loan","monster","sbs","cfd","vip","bid","men","stream","download","gdn","kim","party","review","trade","webcam","win",
@@ -96,10 +101,12 @@ export function analyzeLocal(url, chainLen = 1, finalUrl = null) {
 
   if (url.protocol === "http:") add(10, "الرابط لا يستخدم تشفير HTTPS");
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) add(30, "الرابط يستخدم عنوان IP بدل اسم موقع");
-  if (host.includes("xn--")) add(25, "اسم النطاق يحتوي ترميزاً (Punycode) قد يخفي حروفاً مشابهة لحروف أخرى");
+  if (host.includes("xn--")) add(30, "اسم النطاق يحتوي ترميزاً (Punycode) قد يخفي حروفاً مشابهة لحروف أخرى");
   if (target.username || target.password) add(30, "يحتوي الرابط على علامة @ أو بيانات دخول لإخفاء الوجهة");
   if (labels.length > 4) add(10, "عدد كبير من النطاقات الفرعية");
   if (host.length > 40) add(10, "اسم النطاق طويل بشكل غير معتاد");
+  const hostedOnSharedPlatform = [...HOSTING_PLATFORMS].some((suffix) => hostMatches(host, suffix));
+  if (hostedOnSharedPlatform) add(30, "الرابط مستضاف على منصة استضافة مشتركة؛ هذا لا يثبت الخبث لكنه لا يثبت موثوقية صاحب الصفحة أيضاً");
   if ((host.match(/-/g) || []).length >= 3) add(10, "اسم النطاق يحتوي شرطات كثيرة");
   if (BAD_TLDS.has(tld)) add(15, `امتداد النطاق (.${tld}) شائع في الروابط الاحتيالية`);
   if (full.length > 200) add(5, "الرابط طويل جداً");
@@ -107,7 +114,13 @@ export function analyzeLocal(url, chainLen = 1, finalUrl = null) {
   const kwHost = KEYWORDS.filter((k) => host.includes(k));
   if (kwHost.length) add(Math.min(25, kwHost.length * 10), `كلمات مريبة في اسم النطاق: ${kwHost.join(", ")}`);
   const kwPath = KEYWORDS.filter((k) => (target.pathname + target.search).toLowerCase().includes(k));
-  if (kwPath.length) add(Math.min(10, kwPath.length * 5), "كلمات تتعلق بتسجيل الدخول أو التحقق داخل مسار الرابط");
+  if (kwPath.length) add(Math.min(15, kwPath.length * 5), "كلمات تتعلق بتسجيل الدخول أو التحقق داخل مسار الرابط");
+  if (/(?:camera|webcam|photo|capture|snapshot|getusermedia|microphone|record)/i.test(target.pathname + target.search)) {
+    add(20, "الرابط يحتوي مؤشرات مرتبطة بالكاميرا أو الميكروفون أو التقاط الوسائط؛ لا يمكن إثبات سلوك الصفحة دون تحليلها");
+  }
+  if (/(?:redirect|returnurl|return_url|continue|next|target|dest|destination|url)=https?%3a/i.test(target.search)) {
+    add(15, "الرابط يحتوي وجهة تحويل مضمّنة قد تقود إلى موقع آخر");
+  }
 
   for (const [brand, doms] of Object.entries(BRANDS)) {
     if (host.includes(brand) && !doms.some((d) => hostMatches(host, d))) {
@@ -254,12 +267,18 @@ export async function scanUrl(env, raw, { useVt = false } = {}) {
   const notes = [];
   if (n.assumedScheme) notes.push("لم يحدد الرابط بروتوكولاً، افترضنا http.");
   const red = await followRedirects(url);
-  notes.push("لم نفتح الرابط أو نتصل بوجهته؛ لذلك لا يمكن تأكيد الوجهة النهائية للروابط المختصرة.");
+  if (SHORTENERS.has(url.hostname.toLowerCase()) || /(?:^|[?&])(redirect|url|target|dest|next)=/i.test(url.search)) {
+    notes.push("لم نفتح الرابط أو نتصل بوجهته؛ لذلك لا يمكن تأكيد الوجهة النهائية أو التحويلات.");
+  }
   const finalUrl = red.final && red.chain.length > 1 ? red.final : null;
   const local = analyzeLocal(url, red.chain.length, finalUrl);
   const target = (finalUrl || url).href;
   const sensitiveKeys = [...url.searchParams.keys()].map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, ""));
-  const sensitive = sensitiveKeys.some((key) => /^(?:token|accesstoken|auth|authorization|session|code|verificationcode|otp|password|secret|key|sid|ticket|jwt|signature|cookie|credential|pin)$/.test(key)) || /(?:token|auth|session|otp|password|secret|signature)/i.test(url.hash);
+  const sensitive = sensitiveKeys.some((key) => /^(?:token|accesstoken|auth|authorization|session|code|verificationcode|otp|password|secret|key|sid|ticket|jwt|signature|cookie|credential|pin|chatid|userid|user_id|email|phone|mobile|accountid)$/.test(key)) || /(?:token|auth|session|otp|password|secret|signature)/i.test(url.hash);
+  if (sensitive) {
+    local.score += 20;
+    local.reasons.push("قد يحتوي الرابط على معرّف أو بيانات شخصية/حساسة ضمن معاملات العنوان؛ تجنّب نشره علناً");
+  }
   const vt = useVt && !sensitive ? await vtLookup(env, target) : { skipped: sensitive ? "sensitive_url" : "disabled" };
   const verdict = verdictFrom(local.score, vt);
   const text = formatReport({ original: url, chain: red.chain, finalUrl, local, vt, vtEnabled: useVt && !!env.VT_API_KEY, verdict, notes });
